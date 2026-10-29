@@ -21,7 +21,7 @@ Read `PLAN.md` first. It is the source of truth. The manager (Opus) reviews ever
    Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
    Claude-Session: https://claude.ai/code/session_01DkeRJLSpoDywtrL5j34y7n
    ```
-   Use `git -c user.name="Alder Tizen agent" -c user.email="agent@localhost" commit ...`.
+   Commit with the repo's configured identity (plain `git commit`; do not override user.name or user.email).
 10. **Decisions:** any deviation from Alder or from PLAN.md → one entry in `docs/DECISIONS.md` (date, what, why, alternative).
 
 ## Environment facts
