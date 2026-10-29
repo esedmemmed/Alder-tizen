@@ -34,3 +34,20 @@ test('dev server lookup finds add-on manifests, catalogs, metas, streams and sub
   ]) assert.ok(find(host, path), host + path)
   assert.equal(find('v3-cinemeta.strem.io', '/catalog/movie/nope.json'), null)
 })
+
+test('every subtitle file the OpenSubtitles fixtures name exists', async () => {
+  const fs = await import('node:fs')
+  const path = await import('node:path')
+  const dir = path.join(FIXTURES, 'opensubtitles-v3.strem.io', 'subtitles')
+  const missing = []
+  for (const kind of fs.readdirSync(dir)) {
+    for (const file of fs.readdirSync(path.join(dir, kind))) {
+      const answer = JSON.parse(fs.readFileSync(path.join(dir, kind, file), 'utf8'))
+      for (const sub of answer.subtitles || []) {
+        const u = new URL(sub.url)
+        if (!fs.existsSync(path.join(FIXTURES, u.host, u.pathname))) missing.push(sub.url)
+      }
+    }
+  }
+  assert.deepEqual(missing, [])
+})
