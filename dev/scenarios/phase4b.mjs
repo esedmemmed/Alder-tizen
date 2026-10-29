@@ -94,6 +94,7 @@ const scenarios = [
       await page.waitForFunction(() => window.__alder.router.names().join() === 'details,player', null, { timeout: 8000 });
       const rp = await page.evaluate(() => window.__alder.router.top().params);
       expect(rp.resumeAt === undefined && rp.metaId === 'tt15239678', 'the player gets the title (and resumes from the library position: resumeAt ' + rp.resumeAt + ')');
+      await wait(2500); // let it open and start: leaving a player that is still opening is the player's own business (Phase 3)
       await page.evaluate(() => window.__alder.router.pop());
       await wait(200);
     },
