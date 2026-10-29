@@ -221,3 +221,27 @@ test('sign-in flow pieces: createLink then readLink through the session stremio'
   assert.equal(link.code, 'ALDR-7K2Q')
   assert.equal(await session.stremio.readLink(link.code), KEY)
 })
+
+test('login: e-mail and password give the auth key; a refusal is an ApiException; the request body is Stremio\'s', async () => {
+  const { session, http } = make()
+  assert.equal(await session.login(' viewer@fixture.test ', 'secret'), KEY)
+  const sent = JSON.parse(posts(http, 'login')[0].body)
+  assert.deepEqual(sent, { type: 'Login', email: 'viewer@fixture.test', password: 'secret', facebook: false })
+  const refused = fakeHttp({ overrides: { 'https://api.strem.io/api/login': '{"error":{"code":2,"message":"Wrong e-mail or password"}}' } })
+  const s2 = createSession({ store: memoryStore(), http: refused })
+  await assert.rejects(s2.login('a@b.c', 'x'), e => e.name === 'ApiException' && e.code === 2 && /Wrong/.test(e.message))
+})
+
+test('the add-on list is parsed once: savedMeta and meta do not re-read the kept answer', async () => {
+  const { session, http } = make()
+  session.profiles.add('Ann', KEY)
+  await session.addons()
+  let reads = 0
+  const saved = http.saved
+  session.http.saved = (...a) => { reads++; return saved(...a) }
+  for (let i = 0; i < 20; i++) session.savedMeta('movie', 'tt15239678')
+  assert.equal(reads <= 22, true)
+  const before = reads
+  session.savedMeta('movie', 'tt15239678')
+  assert.equal(reads - before <= 2, true, 'one kept meta per call, no add-on list re-reads')
+})

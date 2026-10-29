@@ -38,6 +38,7 @@ export function windowRange({ scroll, viewport, step, count, buffer }) {
 export function createRow({
   title = '', items = [], images = null, itemWidth = 176, itemHeight = 264, gap = 28, padLeft = 96, safeRight = 48,
   screenWidth = 1920, buffer = 0.75, name = '', renderItem = null, onSelect = null, onHold = null, onFocusItem = null,
+  viewportTop = 102, className = '',
 }) {
   const step = itemWidth + gap;
   const viewport = screenWidth - padLeft;
@@ -48,8 +49,8 @@ export function createRow({
 
   const heading = h('div', { class: 'row-heading caps' }, title);
   const track = h('div', { class: 'row-track' });
-  const strip = h('div', { class: 'row-viewport', style: { top: '102px', height: itemHeight + 'px' } }, track);
-  const el = h('div', { class: 'row', 'data-focus-group': name || title || 'row', style: { height: 102 + itemHeight + 'px' } }, heading, strip);
+  const strip = h('div', { class: 'row-viewport', style: { top: viewportTop + 'px', height: itemHeight + 'px' } }, track);
+  const el = h('div', { class: 'row' + (className ? ' ' + className : ''), 'data-focus-group': name || title || 'row', style: { height: viewportTop + itemHeight + 'px' } }, heading, strip);
 
   function mount(i) {
     if (i < 0 || i >= items.length || mounted.has(i)) return mounted.get(i) || null;
@@ -71,7 +72,9 @@ export function createRow({
   function update() {
     const [from, to] = windowRange({ scroll, viewport, step, count: items.length, buffer });
     Array.from(mounted.keys()).forEach((i) => { if ((i < from || i >= to) && i !== selected) unmount(i); });
-    for (let i = from; i < to; i++) mount(i);
+    // Right to left: the image loader serves the newest request first, so the leftmost (visible) card's picture is asked for last
+    // and arrives first. Cards are placed by `left`, so their order in the DOM does not matter (the focused one has a z-index).
+    for (let i = to - 1; i >= from; i--) mount(i);
   }
 
   function place(animate) {
@@ -120,6 +123,13 @@ export function createRow({
       selected = Math.max(0, Math.min(selected, items.length - 1));
       scroll = scrollFor({ index: selected, scroll: 0, step, itemWidth, viewport, count: items.length, safeRight });
       place(false);
+      update();
+    },
+
+    /** More cards after the last one (a catalog's next page). The selected card and the scroll stay as they are. */
+    append(extra) {
+      if (!extra.length) return;
+      items = items.concat(extra);
       update();
     },
 

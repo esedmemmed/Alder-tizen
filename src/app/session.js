@@ -17,13 +17,14 @@
  *                                            something, else the network. true: the network, always.
  *   savedAddons() / savedLibrary() / savedMeta(type, id)   the kept answer, or null.
  */
-import { createStremio } from '../core/stremio.js'
+import { createStremio, API, ApiException } from '../core/stremio.js'
 import { createProfiles } from '../core/profiles.js'
 import { createSettings } from '../core/settings.js'
 import { createLibrary } from '../core/library.js'
 import { SourceFinder, streamAddonsFor } from '../core/finder.js'
 import { createRanker, createSourceMemory } from '../core/ranking.js'
 import { deviceProfile } from '../core/device.js'
+import { obj, optInt, optString, getString } from '../core/util.js'
 
 /** The http the core modules expect: lib/http names its kept-answer reader `savedAnswer`, the core calls it `saved`. */
 export function coreHttp(raw) {
@@ -63,6 +64,15 @@ export function createSession({ store, http: rawHttp, webapis, log = nothing, tv
   profiles.remove = id => { base.remove(id); changed() }
 
   const authKey = () => { const p = base.active(); return p ? p.authKey : null }
+  // The add-on list parsed once per profile: asking for a title's details on every focus move must not re-read and re-parse
+  // the kept answer each time (Stremio.savedAddons does, by design).
+  const parsed = new Map() // authKey -> Addon[]
+  const addonList = () => {
+    const k = authKey()
+    if (!k) return null
+    if (!parsed.has(k)) { const kept = stremio.savedAddons(k); if (kept) parsed.set(k, kept) }
+    return parsed.get(k) || null
+  }
   const need = () => { const k = authKey(); if (!k) throw new Error('No profile is signed in'); return k }
 
   /** The first add-on serving "meta" for [type]/[id], in the account's order (Alder DetailsActivity). */
@@ -85,19 +95,21 @@ export function createSession({ store, http: rawHttp, webapis, log = nothing, tv
     /** Calls [fn](profile) whenever the active profile changes (setActive, add, removing the active one). Returns unsubscribe. */
     onProfileChange(fn) { listeners.add(fn); return () => listeners.delete(fn) },
 
-    savedAddons() { const k = authKey(); return k ? stremio.savedAddons(k) : null },
+    savedAddons() { return addonList() },
 
     async addons({ refresh = false } = {}) {
       const key = need()
       if (!refresh) {
-        const kept = stremio.savedAddons(key) // also fills Stremio's in-memory list, so details ask these meanwhile
+        const kept = addonList() // also fills Stremio's in-memory list, so details ask these meanwhile
         if (kept) return kept
       }
-      return stremio.addons(key, true)
+      const fresh = await stremio.addons(key, true)
+      parsed.set(key, fresh)
+      return fresh
     },
 
     savedMeta(type, id) {
-      const addon = metaAddon(session.savedAddons(), type, id)
+      const addon = metaAddon(addonList(), type, id)
       return addon ? addon.savedMeta(type, id) : null
     },
 
@@ -130,6 +142,19 @@ export function createSession({ store, http: rawHttp, webapis, log = nothing, tv
      * Sign out of a profile that is being removed (Alder ProfilesActivity): the profile and what is kept per profile go, the
      * kept answers go (they are not told apart by profile), and Stremio is told to end that session, best effort.
      */
+    /**
+     * Stremio sign-in with an e-mail and password (the fallback when the phone link is not handy; the TV flow of Stremio's own
+     * app is the link). Resolves to the account's auth key; a wrong password is an ApiException (its message is Stremio's).
+     * Nothing about the request is logged: it carries the password.
+     */
+    async login(email, password) {
+      const answer = await http.post(API + 'login', JSON.stringify({ type: 'Login', email: String(email).trim(), password, facebook: false }))
+      const json = JSON.parse(answer)
+      const error = obj(json, 'error')
+      if (error) throw new ApiException(optInt(error, 'code'), optString(error, 'message'))
+      return getString(obj(json, 'result'), 'authKey')
+    },
+
     removeProfile(id) {
       const target = base.all().find(p => p.id === id)
       profiles.remove(id)
