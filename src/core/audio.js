@@ -83,7 +83,8 @@ export const NO_SOUND_TAG = 'No sound on this TV'
  */
 export function classifyCodecId(id, playable = TU8000_AUDIO) {
   const ok = playable instanceof Set ? playable : new Set(playable)
-  const s = String(id == null ? '' : id).trim().toLowerCase()
+  // AVPlay's fourCC can be MIME-like ("audio/mpeg", "audio/mp4a-latm", "audio/x-ac3"): drop the type, keep the subtype.
+  const s = String(id == null ? '' : id).trim().toLowerCase().replace(/^audio\/(x-)?/, '')
   const verdict = codec => ({ codec, playable: ok.has(codec) ? 'yes' : 'no' })
   if (!s) return { codec: '', playable: 'maybe' }
   if (/truehd|mlpa|^mlp|a_truehd/.test(s)) return verdict('TRUEHD')
@@ -94,7 +95,7 @@ export function classifyCodecId(id, playable = TU8000_AUDIO) {
   if (/^(ac-?3|ac_3)$|a_ac3|^0x2000$|^2000$/.test(s)) return verdict('AC3')
   if (/^mp4a\.(6b|69)/.test(s)) return verdict('MP3')
   if (/^(mp4a|aac|aacl|aach|adts|latm)|a_aac|^mp4a/.test(s)) return verdict('AAC')
-  if (/^(\.?mp3|mpga|mp2|mpa)|a_mpeg|^0x55$|^55$|^0x50$/.test(s)) return verdict('MP3')
+  if (/^(\.?mp3|mpga|mp2|mpa|mpeg)|a_mpeg|^0x55$|^55$|^0x50$/.test(s)) return verdict('MP3')
   if (/flac/.test(s)) return verdict('FLAC')
   if (/opus/.test(s)) return verdict('OPUS')
   if (/vorb/.test(s)) return verdict('VORBIS')
