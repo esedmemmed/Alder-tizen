@@ -6,7 +6,7 @@
  * box:  { left, width, height } in px inside the row's track
  */
 import { h } from '../lib/dom.js';
-import { iconSvg } from './icons.js';
+import { iconEl } from './icons.js';
 
 export function progressBar(progress) {
   const p = Math.max(0, Math.min(1, Number(progress) || 0));
@@ -21,7 +21,7 @@ export function createCard(item, index, box, images) {
   },
   h('div', { class: 'card-clip' }, img, h('div', { class: 'card-name' }, item.name || '')),
   item.progress > 0 ? progressBar(item.progress) : null,
-  item.watched ? h('div', { class: 'card-check', html: iconSvg('check') }) : null,
+  item.watched ? h('div', { class: 'card-check' }, iconEl('check', 28)) : null,
   h('span', { class: 'rim' }));
   el._img = img;
   if (images && item.poster) {

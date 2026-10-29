@@ -1,6 +1,15 @@
 /**
  * Alder's icon set (res/drawable/ic_*.xml in the Android app), as inline SVG, 24x24, drawn in currentColor.
- * Generated from the vector drawables' path data; do not edit by hand.
+ * The path data below is generated from the vector drawables; do not edit it by hand. Everything under it is how the
+ * paths reach the screen, written for the TV's Chromium M69 (docs/DECISIONS.md "Icons on the TV"):
+ *
+ *   - every <svg> carries xmlns, a numeric width and height (the box it is drawn in) and a viewBox, so it has a size of
+ *     its own wherever it lands: an <svg> with only a viewBox collapsed to 0x0 as a flex item on that engine;
+ *   - an icon always sits in a fixed-size `.icon` wrapper (iconEl() makes both); nothing relies on a percentage size;
+ *   - iconNode()/iconEl() build the elements with createElementNS (no HTML parsing); iconSvg() is the same thing as a
+ *     string for the few call sites that still assign innerHTML, with the same attributes;
+ *   - iconImg() is the same picture as an <img> with a data: URI and the colour baked in (the Diagnostics screen draws
+ *     both, so one photo says which of the two the TV can draw).
  */
 const ICONS = {
   add: '<path d="M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>',
@@ -23,10 +32,128 @@ const ICONS = {
   tv: '<path d="M21,3H3c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h5v2h8v-2h5c1.1,0 1.99,-0.9 1.99,-2L23,5c0,-1.1 -0.9,-2 -2,-2zM21,17H3V5h18v12z"/>',
 };
 
-/** The SVG markup of icon [name] (24x24 viewBox, fills with currentColor); '' when unknown. */
-export function iconSvg(name) {
+const NS = 'http://www.w3.org/2000/svg';
+export const ICON_BOX = 24; // the drawing's own size (its viewBox)
+
+/** The two inks the Diagnostics screen draws with, and what an icon gets when a script paints it (see paintIcon). */
+export const INK_LIGHT = '#F3EEE6';
+export const INK_DARK = '#15110E';
+
+/** The body of icon [name] with every `currentColor` replaced by [color]. */
+function bodyIn(body, color) {
+  return color === 'currentColor' ? body : body.split('currentColor').join(color);
+}
+
+function sizeOf(size) {
+  const n = Math.round(Number(size));
+  return n > 0 ? n : ICON_BOX;
+}
+
+/**
+ * The SVG markup of icon [name], [size] px square, filled with [color]; '' when unknown. Explicit xmlns, width, height and
+ * viewBox. For innerHTML; build elements with iconEl() where you can.
+ */
+export function iconSvg(name, size = ICON_BOX, color = 'currentColor') {
   const body = ICONS[name];
-  return body ? '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' + body + '</svg>' : '';
+  if (!body) return '';
+  const px = sizeOf(size);
+  return '<svg xmlns="' + NS + '" width="' + px + '" height="' + px + '" viewBox="0 0 ' + ICON_BOX + ' ' + ICON_BOX + '" fill="' + color +
+    '" focusable="false" aria-hidden="true">' + bodyIn(body, color) + '</svg>';
+}
+
+/**
+ * The elements of an icon body as [{tag, attrs, children}]: the bodies are only <path> and <g>, so a small reader does.
+ * (Pure, no DOM: tested under Node.)
+ */
+export function parseBody(body) {
+  const root = { tag: 'svg', attrs: {}, children: [] };
+  const stack = [root];
+  const tag = /<(\/?)([a-z]+)([^>]*?)(\/?)>/g;
+  let m;
+  while ((m = tag.exec(body))) {
+    if (m[1]) { if (stack.length > 1) stack.pop(); continue; }
+    const attrs = {};
+    const attr = /([a-z-]+)="([^"]*)"/g;
+    let a;
+    while ((a = attr.exec(m[3]))) attrs[a[1]] = a[2];
+    const node = { tag: m[2], attrs, children: [] };
+    stack[stack.length - 1].children.push(node);
+    if (!m[4]) stack.push(node);
+  }
+  return root.children;
+}
+
+function build(doc, node, color) {
+  const el = doc.createElementNS(NS, node.tag);
+  Object.keys(node.attrs).forEach((k) => el.setAttribute(k, node.attrs[k] === 'currentColor' ? color : node.attrs[k]));
+  node.children.forEach((c) => el.appendChild(build(doc, c, color)));
+  return el;
+}
+
+/** An <svg> element for icon [name]: createElementNS, xmlns, numeric width and height, viewBox, explicit fill. null when unknown. */
+export function iconNode(name, size = ICON_BOX, color = 'currentColor') {
+  const body = ICONS[name];
+  if (!body) return null;
+  const px = sizeOf(size);
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('xmlns', NS);
+  svg.setAttribute('width', String(px));
+  svg.setAttribute('height', String(px));
+  svg.setAttribute('viewBox', '0 0 ' + ICON_BOX + ' ' + ICON_BOX);
+  svg.setAttribute('fill', color);
+  svg.setAttribute('focusable', 'false');
+  svg.setAttribute('aria-hidden', 'true');
+  parseBody(body).forEach((n) => svg.appendChild(build(document, n, color)));
+  return svg;
+}
+
+/**
+ * The `.icon` wrapper with the icon in it: a fixed [size] px box (inline style, no stylesheet needed) and an <svg> of that
+ * size. [color] 'currentColor' follows the CSS colour; a colour value is painted in. className adds classes to the wrapper.
+ */
+export function iconEl(name, size = ICON_BOX, { color = 'currentColor', className = '' } = {}) {
+  const px = sizeOf(size);
+  const span = document.createElement('span');
+  span.className = 'icon' + (className ? ' ' + className : '');
+  span.style.width = px + 'px';
+  span.style.height = px + 'px';
+  const svg = iconNode(name, px, color);
+  if (svg) span.appendChild(svg);
+  return span;
+}
+
+/** Puts icon [name] in the wrapper [span] in place of what it holds (Play becomes Pause). */
+export function swapIcon(span, name, size = ICON_BOX, color = 'currentColor') {
+  while (span.firstChild) span.removeChild(span.firstChild);
+  const svg = iconNode(name, size, color);
+  if (svg) span.appendChild(svg);
+}
+
+/** Paints every <svg> under [root] with [color]: the fill, and the stroke of the shapes drawn with one (mic). */
+export function paintIcon(root, color) {
+  const svgs = root.tagName && root.tagName.toLowerCase() === 'svg' ? [root] : Array.prototype.slice.call(root.querySelectorAll('svg'));
+  svgs.forEach((svg) => {
+    svg.setAttribute('fill', color);
+    Array.prototype.forEach.call(svg.querySelectorAll('[stroke]'), (e) => e.setAttribute('stroke', color));
+  });
+}
+
+/** icon [name] as a data: URI of an SVG with [color] baked in (the # and < of an SVG are percent-encoded). '' when unknown. */
+export function iconDataUri(name, color = INK_LIGHT, size = 48) {
+  const svg = iconSvg(name, size, color);
+  return svg ? 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg) : '';
+}
+
+/** An <img> of icon [name]: a data: URI, width and height set, colour baked in. The fallback if inline <svg> ever fails. */
+export function iconImg(name, size = ICON_BOX, color = INK_LIGHT) {
+  const px = sizeOf(size);
+  const img = document.createElement('img');
+  img.setAttribute('width', String(px));
+  img.setAttribute('height', String(px));
+  img.setAttribute('alt', '');
+  img.style.display = 'block';
+  img.src = iconDataUri(name, color, px);
+  return img;
 }
 
 export const ICON_NAMES = Object.keys(ICONS);

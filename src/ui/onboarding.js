@@ -4,7 +4,7 @@
  * and a backdrop made from one film's art without blur (a 64 x 36 copy stretched over the screen is as soft as Alder's frost).
  */
 import { h, cls } from '../lib/dom.js';
-import { iconSvg } from './icons.js';
+import { iconEl } from './icons.js';
 import { COLORS } from '../core/profiles.js';
 
 /** The mark beside the serif "Alder", top left of the picker and the sign-in. */
@@ -32,7 +32,8 @@ export function swatches(selected, onPick) {
   function mark(color) {
     discs.forEach((d) => {
       d.el.classList.toggle('on', d.color === color);
-      d.el.innerHTML = d.color === color ? iconSvg('check') : '';
+      while (d.el.firstChild) d.el.removeChild(d.el.firstChild);
+      if (d.color === color) d.el.appendChild(iconEl('check', 30));
     });
   }
   mark(selected);

@@ -15,7 +15,7 @@ import { stableSort } from '../core/util.js';
 import { KEYS } from '../core/keys.js';
 import { createCard } from '../ui/card.js';
 import { chip } from '../ui/chip.js';
-import { iconSvg } from '../ui/icons.js';
+import { iconSvg, iconEl } from '../ui/icons.js';
 import { openPanel } from '../ui/panel.js';
 import { clock, artLayer, failedCard, ring, imdbTag, avatar } from '../ui/screens-b/kit.js';
 import {
@@ -371,7 +371,7 @@ export function createSearchScreen() {
       measure = h('span', { class: 'sr-measure' });
       cursor = h('span', { class: 'sr-cursor' });
       countEl = h('span', { class: 'sr-count t-small t-3' });
-      clearBtn = h('div', { class: 'sr-clear', 'data-focus': '', tabindex: '-1', role: 'button', 'aria-label': 'Clear search', hidden: true, html: iconSvg('close') });
+      clearBtn = h('div', { class: 'sr-clear', 'data-focus': '', tabindex: '-1', role: 'button', 'aria-label': 'Clear search', hidden: true }, iconEl('close', 32));
       clearBtn.addEventListener('click', () => { input.value = ''; changed(); clearTimeout(typedTimer); search(false); ctx.engine.focus(firstKey); });
       field = h('div', { class: 'sr-field' }, h('span', { class: 'icon sr-fieldicon', html: iconSvg('search') }),
         h('div', { class: 'sr-inputbox' }, input, measure, cursor), countEl, clearBtn);

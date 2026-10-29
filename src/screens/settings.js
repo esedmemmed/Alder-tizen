@@ -22,7 +22,8 @@ import { clock, avatar, keepVisible } from '../ui/screens-b/kit.js';
 import { addonShortName } from '../ui/screens-b/helpers.js';
 
 // Icons Alder draws as glyphs (♙ ◎ ▤): drawn here, the bundled fonts have no such characters.
-const svg = (inner) => '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' + inner + '</svg>';
+// Same attributes as src/ui/icons.js gives its icons (xmlns, numeric size, viewBox): an <svg> with only a viewBox collapses on the TV.
+const svg = (inner) => '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" focusable="false" aria-hidden="true">' + inner + '</svg>';
 const PERSON = svg('<path d="M12,12c2.21,0 4,-1.79 4,-4s-1.79,-4 -4,-4 -4,1.79 -4,4 1.79,4 4,4zM12,14c-2.67,0 -8,1.34 -8,4v2h16v-2c0,-2.66 -5.33,-4 -8,-4z"/>');
 const GLOBE = svg('<path d="M12,3a9,9 0,1 0,0 18a9,9 0,0 0,0 -18zM12,5a7,7 0,1 1,0 14a7,7 0,0 1,0 -14z"/><circle cx="12" cy="12" r="3.2"/>');
 const DRIVE = svg('<path d="M4,5h16a2,2 0,0 1,2 2v10a2,2 0,0 1,-2 2H4a2,2 0,0 1,-2 -2V7a2,2 0,0 1,2 -2zM4,7v10h16V7zM6,9h12v2H6zM6,13h12v2H6z"/>');

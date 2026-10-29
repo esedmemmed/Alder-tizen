@@ -61,7 +61,11 @@ html, body {
 /* text straight on art: a soft dark shadow instead of a panel (TextView.onArt) */
 .on-art { text-shadow: 0 2px 16px rgba(0, 0, 0, 0.8); }
 
-.icon { display: inline-block; width: 32px; height: 32px; flex: none; }
-.icon svg { display: block; width: 100%; height: 100%; }
+/* Icons (src/ui/icons.js, docs/DECISIONS.md "Icons on the TV"). The wrapper has a size in px; the <svg> takes that same size
+   by `inherit` (an absolute length, no percentage to resolve) and also carries numeric width/height attributes of its own,
+   so an icon never depends on a flex or percentage rule to get a box: an <svg> with nothing but a viewBox collapsed to 0x0
+   as a flex item on the TV's Chromium M69. Always put an icon in an .icon wrapper. */
+.icon { display: inline-block; position: relative; width: 32px; height: 32px; flex: none; }
+.icon svg { display: block; flex: none; width: inherit; height: inherit; }
 
 [hidden] { display: none !important; }
