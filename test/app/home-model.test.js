@@ -44,9 +44,11 @@ test('catalogGenres: no All, no duplicates, the common ones first; settledGenres
   assert.equal(isAddonMessage('Authentication Required: log in'), true)
 })
 
-test('shelves of the fixture account: Home has none without Watchly rows, Movies has Cinemeta, the examples and Watchly picks first', () => {
+test('shelves of the fixture account: Home has Watchly\'s item row only, Movies has Cinemeta, the examples and Watchly picks first', () => {
   const addons = fixtureAddons(fakeHttp())
-  assert.equal(shelvesFor('Home', addons).length, 0)
+  const home = shelvesFor('Home', addons)
+  assert.equal(home.length, 1, 'watchly.rec is a Movies pick; only watchly.item.* rows are on Home')
+  assert.equal(home[0].shelf.title, 'More like Interstellar')
   const movies = shelvesFor('Movies', addons)
   assert.ok(movies.length >= 3)
   assert.equal(movies[0].shelf.title, 'Top Picks for You', 'personal picks first (rank 0)')

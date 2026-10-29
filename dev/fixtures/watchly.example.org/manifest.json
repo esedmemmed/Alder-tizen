@@ -24,6 +24,16 @@
           "name": "skip"
         }
       ]
+    },
+    {
+      "id": "watchly.item.tt0816692",
+      "type": "movie",
+      "name": "Because you watched Interstellar",
+      "extra": [
+        {
+          "name": "skip"
+        }
+      ]
     }
   ]
 }
