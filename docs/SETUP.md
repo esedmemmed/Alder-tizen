@@ -50,7 +50,7 @@ number. You can also find it on the phone: **Settings, Connections, Wi-Fi**, tap
 
 ### 5. Get `Alder.wgt` onto the phone
 
-Download `Alder.wgt` to the phone from <https://github.com/esedmemmed/Alder-tizen/releases/latest> (or from wherever you
+Download `Alder.wgt` to the phone from <https://github.com/esedmemmed/Alder-tizen/raw/main/release/Alder.wgt> (or from wherever you
 were given it). It is a small file (about 450 KB). A normal browser download goes to the **Downloads** folder. Do not rename it
 and do not unzip it.
 
