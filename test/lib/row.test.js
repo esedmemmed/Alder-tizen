@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { scrollFor, windowRange } from '../../src/ui/row.js';
+import { scrollFor, slideFor, windowRange } from '../../src/ui/row.js';
 
 const base = { step: 204, itemWidth: 176, viewport: 1920 - 96, count: 40, safeRight: 48 };
 
@@ -49,4 +49,12 @@ test('windowRange keeps the visible cards plus a buffer, clamped to the row', ()
   const [f3, t3] = windowRange({ scroll: 99999, viewport: 1824, step: 204, count: 40, buffer: 0.75 });
   assert.ok(f3 <= t3 && t3 === 40);
   assert.deepEqual(windowRange({ scroll: 0, viewport: 1824, step: 204, count: 0, buffer: 0.75 }), [0, 0]);
+});
+
+test('slideFor puts the focused card at the row start, one card per press, and stops at the end', () => {
+  const b = { step: 204, itemWidth: 176, viewport: 1824, count: 40, safeRight: 96 };
+  assert.equal(slideFor(Object.assign({ index: 0 }, b)), 0);
+  assert.equal(slideFor(Object.assign({ index: 3 }, b)), 3 * 204);
+  assert.equal(slideFor(Object.assign({ index: 39 }, b)), 39 * 204 + 176 - (1824 - 96), 'the last card rests at the right margin');
+  assert.equal(slideFor(Object.assign({}, b, { index: 2, count: 5 })), 0, 'a short row does not slide');
 });

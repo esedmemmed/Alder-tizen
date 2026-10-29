@@ -35,10 +35,19 @@ export function windowRange({ scroll, viewport, step, count, buffer }) {
   return [from, Math.max(from, to)];
 }
 
+/**
+ * Alder's Home rows: the focused card slides to the row's start, where the eye already is, one card per press; near the end
+ * the row stops, so the last card rests at the right margin (MainActivity Row.focus). [safeRight] is that margin.
+ */
+export function slideFor({ index, step, itemWidth, viewport, count, safeRight = 0 }) {
+  const max = Math.max(0, (count - 1) * step + itemWidth - (viewport - safeRight));
+  return Math.max(0, Math.min(index * step, max));
+}
+
 export function createRow({
   title = '', items = [], images = null, itemWidth = 176, itemHeight = 264, gap = 28, padLeft = 96, safeRight = 48,
   screenWidth = 1920, buffer = 0.75, name = '', renderItem = null, onSelect = null, onHold = null, onFocusItem = null,
-  viewportTop = 102, className = '',
+  viewportTop = 102, className = '', slide = false,
 }) {
   const step = itemWidth + gap;
   const viewport = screenWidth - padLeft;
@@ -84,7 +93,9 @@ export function createRow({
   }
 
   function reveal(i, animate) {
-    const s = scrollFor({ index: i, scroll, step, itemWidth, viewport, count: items.length, safeRight });
+    const s = slide
+      ? slideFor({ index: i, step, itemWidth, viewport, count: items.length, safeRight })
+      : scrollFor({ index: i, scroll, step, itemWidth, viewport, count: items.length, safeRight });
     if (s !== scroll) { scroll = s; place(animate); }
     update();
   }
@@ -111,6 +122,9 @@ export function createRow({
     get selected() { return selected; },
     get count() { return items.length; },
     get scroll() { return scroll; },
+    get step() { return step; },
+    get padLeft() { return padLeft; },
+    get length() { return items.length; },
     mountedCount: () => mounted.size,
     cardAt: (i) => mounted.get(i) || null,
     itemAt: (i) => items[i],
@@ -121,7 +135,8 @@ export function createRow({
       Array.from(mounted.keys()).forEach(unmount);
       items = next;
       selected = Math.max(0, Math.min(selected, items.length - 1));
-      scroll = scrollFor({ index: selected, scroll: 0, step, itemWidth, viewport, count: items.length, safeRight });
+      scroll = slide ? slideFor({ index: selected, step, itemWidth, viewport, count: items.length, safeRight })
+        : scrollFor({ index: selected, scroll: 0, step, itemWidth, viewport, count: items.length, safeRight });
       place(false);
       update();
     },
@@ -130,12 +145,14 @@ export function createRow({
     append(extra) {
       if (!extra.length) return;
       items = items.concat(extra);
-      update();
+      // The slide was clamped to the old end: with more cards in, the focused one can reach the start.
+      if (slide) reveal(selected, true); else update();
     },
 
     /** Makes card [i] visible without animating and returns it (mounting it first). */
     ensure(i) {
       const k = Math.max(0, Math.min(items.length - 1, i));
+      selected = k;
       reveal(k, false);
       return mount(k);
     },
