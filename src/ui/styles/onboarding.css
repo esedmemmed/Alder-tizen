@@ -125,7 +125,7 @@
 .pk-hint { position: absolute; left: 0; bottom: 40px; width: 1920px; display: flex; justify-content: center; }
 .pk-manage .chip { height: 60px; border-radius: 30px; }
 
-/* ---- the PIN: boxes and a pad ---- */
+/* ---- the PIN: four boxes the remote turns ---- */
 .pk-pinscreen .pin { position: absolute; left: 0; top: 200px; width: 1920px; text-align: center; }
 .pin-sub { margin-top: 8px; }
 .pin-boxes { display: flex; justify-content: center; margin-top: 56px; }
@@ -134,11 +134,9 @@
   background: var(--glass); border: var(--hairline) solid var(--glass-edge);
   font-size: var(--fs-code); line-height: 148px; font-weight: 600; text-align: center;
 }
-.pin-box.now { border-color: var(--tungsten); }
+.pin-box.now { border-color: var(--tungsten); background: var(--glass-focused); }
 .pin-error { color: var(--tungsten); height: var(--lh-body); margin-top: 20px; }
-.pin-pad { width: 528px; margin: 16px auto 0 auto; display: flex; flex-wrap: wrap; justify-content: center; }
-.pin-key { width: 160px; height: 84px; margin: 6px; font-size: var(--fs-body); line-height: 80px; }
-.pin-hint { margin-top: 20px; }
+.pin-hint { margin-top: 28px; white-space: pre; }
 .shake { animation: pin-shake 130ms linear 1; }
 @keyframes pin-shake {
   0% { transform: translate3d(0, 0, 0); }
@@ -169,5 +167,3 @@
 .osk-key:focus { background: var(--row-focused); color: var(--text); }
 .osk-key.on { color: var(--tungsten); }
 .osk-key.blank { background: transparent; }
-.pin-key { background: var(--glass); border: var(--hairline) solid var(--glass-edge); }
-.pin-key:first-child { margin-left: 6px; }

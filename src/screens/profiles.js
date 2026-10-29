@@ -162,6 +162,7 @@ export function createProfilesScreen(params = {}) {
     backTo = back;
     clear(root);
     const pin = createPinEntry({ title, errorMessage, check });
+    root.appendChild(backdrop().el);
     root.appendChild(h('div', { class: 'pk pk-pinscreen' }, h('div', { class: 'pk-brand' }, brand()), pin.el));
     pinEntry = pin;
     ctx.engine.focus(pin.firstKey);
