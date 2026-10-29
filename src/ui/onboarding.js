@@ -49,22 +49,23 @@ export function frame({ step = null, left, right, leftWidth = 0, className = '' 
   const top = h('div', { class: 'ob-top' }, brand(), step ? h('span', { class: 't-small t-2' }, step.label) : null, dots);
   const l = h('div', { class: 'ob-left', style: leftWidth ? { width: leftWidth + 'px', flex: 'none' } : null }, left);
   const r = h('div', { class: 'ob-right' }, right);
-  return h('div', { class: cls('ob-frame', className) }, top, h('div', { class: 'ob-body' }, l, r));
+  return h('div', { class: cls('ob-frame', className) }, h('div', { class: 'ob-backdrop' }, h('div', { class: 'ob-scene' })), top, h('div', { class: 'ob-body' }, l, r));
 }
 
 /**
- * A full-screen backdrop from a picture: the art copied to a tiny canvas and stretched, so it is soft without a blur filter.
+ * A full-screen backdrop from a picture: the art copied to a tiny canvas and stretched, so it is soft without a blur filter. Until
+ * there is a picture (and for the sign-in steps) it is Alder's own night scene, dimmed (onboarding_scene).
  * Returns { el, show(url, images) }: show() loads the picture through the image loader and fades it in.
  */
 export function backdrop() {
   const canvas = h('canvas', { class: 'ob-backdrop-art', width: 64, height: 36 });
-  const el = h('div', { class: 'ob-backdrop' }, canvas, h('div', { class: 'ob-backdrop-shade' }));
+  const el = h('div', { class: 'ob-backdrop' }, h('div', { class: 'ob-scene' }), canvas, h('div', { class: 'ob-backdrop-shade' }));
   let token = 0;
   return {
     el,
     show(url, images) {
       const mine = ++token;
-      if (!url || !images) { canvas.classList.remove('on'); return; }
+      if (!url || !images) { canvas.classList.remove('on'); el.classList.remove('has-art'); return; }
       const img = new Image();
       images.load(img, url, {
         urgent: true,
@@ -72,13 +73,13 @@ export function backdrop() {
           if (mine !== token) return;
           const draw = () => {
             if (mine !== token) return;
-            try { canvas.getContext('2d').drawImage(img, 0, 0, 64, 36); canvas.classList.add('on'); } catch (e) { /* no picture: the plain backdrop stays */ }
+            try { canvas.getContext('2d').drawImage(img, 0, 0, 64, 36); canvas.classList.add('on'); el.classList.add('has-art'); } catch (e) { /* no picture: the scene stays */ }
           };
           if (img.complete) draw(); else img.onload = draw;
         },
-        onFail() { if (mine === token) canvas.classList.remove('on'); },
+        onFail() { if (mine === token) { canvas.classList.remove('on'); el.classList.remove('has-art'); } },
       });
     },
-    hide() { token++; canvas.classList.remove('on'); },
+    hide() { token++; canvas.classList.remove('on'); el.classList.remove('has-art'); },
   };
 }

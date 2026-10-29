@@ -51,7 +51,7 @@ export async function build({ dev = false, log = console.log } = {}) {
   });
   const css = await esbuild({
     ...common, entryPoints: ['src/ui/styles/main.css'], outfile: join(outDir, 'app.css'),
-    minify: !dev, loader: { '.woff': 'file', '.woff2': 'file', '.png': 'file' }, assetNames: 'assets/[name]-[hash]', metafile: true,
+    minify: !dev, loader: { '.woff': 'file', '.woff2': 'file', '.png': 'file', '.webp': 'file' }, assetNames: 'assets/[name]-[hash]', metafile: true,
   });
 
   // index.html: in dev the mock replaces the TV's webapis.js
