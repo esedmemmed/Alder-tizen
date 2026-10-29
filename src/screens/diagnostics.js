@@ -14,6 +14,7 @@ import { log as appLog } from '../lib/log.js';
 import { ENV, VERSION } from '../lib/env.js';
 import { describeDevice, deviceProfile } from '../core/device.js';
 import { diag as appDiag } from '../player/diag.js';
+import { pictureLines } from '../player/picture.js';
 
 const LINE = 40; // px: one line of the report
 const FIVE = 5; // lines per Up / Down press (a held key repeats)
@@ -46,6 +47,9 @@ export function buildReport({ log, diag, device = null, version = '', env = '', 
       'request headers sent: ' + (s.headers.length ? s.headers.join(', ') : 'none'),
     ]);
   } else section('STREAM', ['Nothing has been played yet']);
+
+  // What shape the file is and what the player did about it: tells a film's own black bars from a picture that is too small
+  if (s) section('PICTURE', pictureLines(diag.picture));
 
   const raw = diag.rawTracks;
   if (raw === null || raw === undefined) section('AVPLAY TRACKS (raw)', ['Not read yet']);

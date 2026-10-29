@@ -1,6 +1,7 @@
 /*
  * The player's views over the engine: Alder's controls (docs/controls.jpg), the pause shade, the loading overlay, the
- * Skip intro pill and the cards (Up next, "Keeps buffering", "Source failed"). A port of buildControls(), showControls(),
+ * Skip intro pill and the cards (Up next, "Keeps buffering", "Source failed", and Info: the shape of the picture and the way
+ * to the title page, which the Info button used to open at once). A port of buildControls(), showControls(),
  * hideControls(), updateProgress(), buildLoading(), showUpNext(), showStall() and showSourceError() in PlayerActivity.kt.
  *
  * Focus here is one of our own, not the shell's focus engine: the player takes every key (the screen returns true for
@@ -17,6 +18,7 @@ import { keyHint } from '../ui/chip.js';
 import { PLAYER } from '../core/playback.js';
 import { logoFor } from '../lib/images.js';
 import { createBar, formatClock, formatLeft } from './bar.js';
+import { PICTURE_NAMES, PICTURE } from './picture.js';
 
 const { HIDE, SKIP } = PLAYER;
 const REFRESH = 500; // ms between updates of the bar and the times (Alder's progressTask)
@@ -281,6 +283,33 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
     openCard('stall', node, [lower, keep, other], 0);
   }
 
+  /**
+   * The Info button. Alder's opens the title page; here it first says what is on the screen, because the question people
+   * have when a film "doesn't fill the screen" is whether the bars are in the file. The title page is one press further.
+   */
+  function showInfo() {
+    if (isShown) hide(true);
+    setLoading(false);
+    const info = engine.titleInfo();
+    const pic = engine.pictureInfo();
+    const close = pillAction('Close', null, () => closeCard());
+    const details = chipAction('Title page', () => engine.info());
+    const shows = pic.showing === PICTURE.FILL ? 'Fill  ·  zoomed in, ' + (pic.crop ? pic.crop + '% of the picture is cut off' : 'nothing is cut off for this film')
+      : pic.mode === PICTURE.FILL && pic.reason ? 'Fit  ·  Fill is not applied: ' + pic.reason
+      : PICTURE_NAMES.fit + '  ·  the whole picture' + (pic.bars ? ', black bars where the shapes differ' : '');
+    const source = engine.currentSource();
+    const node = h('div', { class: 'pl-card pl-stall pl-info on-art' },
+      h('div', { class: 'caps', style: { color: 'var(--tungsten)' } }, 'Info'),
+      h('div', { class: 'pl-card-title t-title' }, info.title || info.name || ''),
+      info.subtitle ? h('div', { class: 'pl-card-sub t-small t-2' }, info.subtitle) : null,
+      h('div', { class: 'pl-card-text t-body' }, pic.shape ? 'Picture  ·  ' + pic.text : "Picture  ·  this file doesn't say its size"),
+      pic.note ? h('div', { class: 'pl-card-text t-small t-2' }, pic.note) : null,
+      h('div', { class: 'pl-card-text t-small t-2' }, 'Showing  ·  ' + shows),
+      source && source.label ? h('div', { class: 'pl-card-text t-small t-3' }, 'Source  ·  ' + source.label) : null,
+      h('div', { class: 'pl-card-actions' }, close.el, details.el));
+    openCard('info', node, [close, details], 0);
+  }
+
   function showSourceError() {
     const other = pillAction('Other sources', null, () => engine.changeStream());
     const node = h('div', { class: 'pl-card pl-error' },
@@ -317,7 +346,7 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
 
     if (card) {
       if (a === 'back') {
-        if (!evt.repeat) { if (card.kind === 'upnext') engine.dismissUpNext(); else engine.dismissStall(); }
+        if (!evt.repeat) { if (card.kind === 'upnext') engine.dismissUpNext(); else if (card.kind === 'info') closeCard(); else engine.dismissStall(); }
         return true;
       }
       if (a === 'left') cardFocus(card.at - 1);
@@ -359,7 +388,7 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
     else if (id === 'stream') engine.changeStream();
     else if (id === 'play') engine.togglePlay();
     else if (id === 'next') engine.playNext();
-    else if (id === 'info') engine.info();
+    else if (id === 'info') showInfo();
   }
 
   const api = {

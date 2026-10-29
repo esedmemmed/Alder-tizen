@@ -10,6 +10,10 @@
  * (NuvioTV's rule), so a dropped connection does not cost the source. Resumes where Stremio says you stopped and writes
  * progress back to the account, so Continue Watching matches on every device.
  *
+ * Picture (v0.2, docs/DECISIONS.md "Picture size"): the video's shape is read from the VIDEO track once AVPlay has prepared, and
+ * the viewer's Fit / Fill choice (Settings' per-profile default, changeable in the options panel and then remembered) is
+ * handed to avplay.setPicture() before play and again whenever it changes: at once, no reload.
+ *
  * Tizen additions (PLAN.md section 5, Stage B): after AVPlay has prepared, the audio tracks are read and the best
  * *playable* one is selected before play (core/audio.js decideAudio); a file with nothing this TV can decode is a failed
  * source ("no playable audio"); an audio decode error mid-film moves to the next track at the same second.
@@ -35,6 +39,7 @@
  *   scrub          { position }                the playing point moved on the bar (the seek itself waits for SEEK_SETTLE)
  *   meta           { }                         the episode list arrived: title, subtitle and "Next episode" may have changed
  *   tracks         { }                         audio / subtitle choices changed (options panel)
+ *   picture        { ...pictureInfo() }        Fit / Fill changed, or the video's shape became known (options panel)
  *   subtitle       { lines | null }            what the subtitle overlay draws (lines as core cueLines)
  *   skip           { visible, label }          the Skip intro / recap pill
  *   upNext         { video } / upNextHide      the Up next card
@@ -55,6 +60,7 @@ import { errorCode } from './avplay.js';
 import { parseTextTracks, startSubtitle } from './tracks.js';
 import { parseSubtitles, shiftCues, cueAt, cueLines } from './subtitles.js';
 import { resolvePlayableUrl } from './sources.js';
+import { PICTURE, PICTURE_NAMES, normalisePicture, parseVideoShape, shapeText, shapeNote, hasBars, cropPercent } from './picture.js';
 
 const { TICK, PUSH_EVERY, RESUME_SLACK, SKIP_SHOWN, START_WAIT, RETRIES, RETRY_WAIT, SEEK_SETTLE, STALL_WINDOW, STALLS_FOR_LOWER } = PLAYER;
 
@@ -142,6 +148,10 @@ export function createEngine(params, deps) {
   let reloadAt = null; // while a retry or an audio change reloads the source: where it was
   let pendingSeek = null;
   let lastHttpStatus = 0;
+  let pictureMode = normalisePicture(settings && settings.pictureSize ? settings.pictureSize() : PICTURE.FIT); // what the viewer asked for
+  let shape = null; // the video's shape (picture.js parseVideoShape), null until AVPlay has prepared or when it does not say
+  let pictureReady = false; // AVPlay has prepared this session: the choice can be applied now
+  let pictureApplied = null; // what avplay.setPicture() answered: { mode, method, roi, reason }, null before the first
   let audioTracks = [];
   let audioIndex = null; // the audio track in use
   let textTracks = [];
@@ -247,6 +257,7 @@ export function createEngine(params, deps) {
     lastHttpStatus = 0;
     bufferPercent = 0;
     playRequested = false; // events of this prepare are not the picture
+    pictureReady = false;
     let url;
     try {
       url = await Promise.resolve(resolveUrl(s));
@@ -277,6 +288,7 @@ export function createEngine(params, deps) {
     const current = avplay.currentIndex('AUDIO');
     audioTracks = parseAudioTracks(raw, { currentIndex: current, playable: device.audio });
     textTracks = parseTextTracks(raw);
+    readShape(raw);
     say('prepared: ' + (duration / 1000).toFixed(0) + ' s' + (live ? ' (live)' : '') + ', audio [' + describeTracks(audioTracks) + '], ' + textTracks.length + ' text track(s)');
 
     // Release files carry many dubs; start in the chosen language (the TV's unless Settings says) instead of the first.
@@ -304,6 +316,7 @@ export function createEngine(params, deps) {
     }
     applySubtitleMode();
     emit('tracks');
+    applyPicture();
 
     // A fresh source starts from startAt (the library's answer may still move it); a reload resumes where it was.
     let from = started ? position : startAt;
@@ -318,6 +331,57 @@ export function createEngine(params, deps) {
     playing = true;
     avplay.play();
     emit('playing', { playing: true });
+  }
+
+  // ---- picture size ----
+
+  /** The video's shape from the track list (or, failing that, the streams AVPlay says are playing). Null when it is not said. */
+  function readShape(raw) {
+    const current = avplay.currentIndex('VIDEO');
+    shape = parseVideoShape(raw, { currentIndex: current }) || parseVideoShape(avplay.currentStreams(), { currentIndex: current });
+    decide('picture: source ' + (shape ? shapeText(shape) + (shape.reported === 'none' ? '' : ' (' + shape.reported + ' aspect reported)') : 'size not reported by the TV'));
+  }
+
+  /** Hands the viewer's choice to AVPlay for this session (open() starts every session as Fit). */
+  function applyPicture() {
+    pictureReady = true;
+    pictureApplied = avplay.setPicture(pictureMode, shape);
+    if (pictureMode === PICTURE.FILL && pictureApplied.mode !== PICTURE.FILL) decide('picture: Fill not applied (' + pictureApplied.reason + '), showing Fit');
+    else decide('picture: ' + PICTURE_NAMES[pictureApplied.mode] + ' (' + pictureApplied.method + (pictureApplied.roi ? ', crop ' + pictureApplied.roi.join(',') : '') + ')');
+    if (diag) diag.setPicture(pictureInfo());
+    emit('picture', pictureInfo());
+  }
+
+  /** What the options panel, the Info card and Diagnostics say about the picture. */
+  function pictureInfo() {
+    const applied = pictureApplied;
+    return {
+      mode: pictureMode, // asked for
+      showing: applied ? applied.mode : PICTURE.FIT, // what is on the screen now
+      fillSupported: avplay.fillSupported,
+      reason: applied ? applied.reason : '',
+      method: applied ? applied.method : '',
+      roi: applied ? applied.roi : null,
+      shape,
+      text: shapeText(shape),
+      note: shapeNote(shape),
+      bars: hasBars(shape),
+      crop: cropPercent(shape),
+    };
+  }
+
+  /**
+   * The viewer's Fit / Fill. Applied at once, at the same second (no reload), and kept as this profile's default so the
+   * next film starts the same way. Before AVPlay has prepared only the choice is kept; afterPrepare applies it.
+   */
+  function setPicture(mode) {
+    if (shut) return false;
+    const wanted = normalisePicture(mode);
+    pictureMode = wanted;
+    if (settings && typeof settings.set === 'function' && typeof settings.choice === 'function') settings.set(settings.choice('pictureSize'), wanted);
+    if (pictureReady) applyPicture();
+    else emit('picture', pictureInfo());
+    return true;
   }
 
   /** What AVPlay draws or stays quiet about, from the subtitle choice: the file's own track, or nothing (an add-on file is drawn by us). */
@@ -466,6 +530,8 @@ export function createEngine(params, deps) {
       audioIndex = null;
       audioTracks = [];
       textTracks = [];
+      shape = null;
+      pictureApplied = null;
       subMode = 'off';
       textIndex = null;
       decide('source failed (' + reason + '); trying source ' + (at + 1) + '/' + sources.length + ' at ' + Math.round(here / 1000) + ' s');
@@ -547,6 +613,7 @@ export function createEngine(params, deps) {
     if (!suspended || shut) return;
     suspended = false;
     avplay.restore();
+    if (pictureReady) applyPicture(); // the display settings are AVPlay's own: say them again after a suspend
     if (prepared) {
       lastPosition = position();
       tickTimer = after(tick, TICK);
@@ -918,6 +985,7 @@ export function createEngine(params, deps) {
     changeStream,
     info() { finish({ kind: 'details' }); },
     selectAudio, selectSubtitle, setSubtitleDelay,
+    setPicture, pictureInfo,
     /** The controls came up or went down: the Skip pill gives way to them. */
     setControlsShown(shown) {
       controlsShown = !!shown;

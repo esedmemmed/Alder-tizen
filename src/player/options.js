@@ -1,7 +1,7 @@
 /*
  * The Audio & subtitles panel (docs/tracks.jpg), a port of openOptions() and section() in PlayerActivity.kt: a panel
  * down the left over the picture with the audio tracks, the subtitles (Off first), the subtitle timing when an add-on file
- * is on, and "Change stream" with the source playing. The chosen row has a tick; OK on another row switches to it there
+ * is on, the Picture size (Fit / Fill, with the source's shape under the heading), and "Change stream" with the source playing. The chosen row has a tick; OK on another row switches to it there
  * and then; Back closes. The panel is near opaque (PLAN.md: no backdrop-filter on this TV), and the playing bar is
  * repeated small at the bottom right.
  *
@@ -11,6 +11,7 @@ import { h } from '../lib/dom.js';
 import { iconSvg } from '../ui/icons.js';
 import { createBar, formatClock } from './bar.js';
 import { audioRows, subtitleRows, TIMING_STEPS, timingLabel } from './tracks.js';
+import { PICTURE, pictureHints } from './picture.js';
 
 const DOT = '  ·  ';
 
@@ -26,10 +27,12 @@ export function createOptions({ host, engine }) {
   let elapsed = null;
   let left = null;
   let offTracks = null;
+  let offPicture = null;
 
   /** One section: a tungsten heading and its rows. [chosen]: the index of the row with the tick. */
-  function section(into, heading, items, chosenIndex, pick) {
+  function section(into, heading, items, chosenIndex, pick, notes = []) {
     into.appendChild(h('div', { class: 'caps pl-opt-heading', style: { color: 'var(--tungsten)' } }, heading));
+    notes.filter(Boolean).forEach((text) => into.appendChild(h('div', { class: 'pl-opt-sub t-small t-2' }, text)));
     items.forEach((item, i) => {
       const dim = item.playable === false;
       const name = h('span', { class: 'pl-opt-name' }, item.name);
@@ -67,6 +70,16 @@ export function createOptions({ host, engine }) {
       else engine.selectSubtitle({ kind: 'addon', sub: r.sub });
     });
 
+    // Picture: Fit or Fill, with what the file says about its own shape (so black bars can be told from a small picture)
+    const pic = engine.pictureInfo();
+    if (pic.fillSupported) {
+      const hints = pictureHints(pic.shape, true);
+      const fillTag = pic.mode === PICTURE.FILL && pic.showing !== PICTURE.FILL && pic.reason ? pic.reason : hints.fill;
+      const modes = [{ id: PICTURE.FIT, name: 'Fit', tag: hints.fit }, { id: PICTURE.FILL, name: 'Fill', tag: fillTag }];
+      const note = pic.shape ? pic.text + (pic.bars ? '  ·  black bars are part of the film' : '') : "This file doesn't say its size";
+      section(list, 'Picture', modes, pic.mode === PICTURE.FILL ? 1 : 0, (i, r) => { engine.setPicture(r.id); }, [note]);
+    }
+
     if (t.canShift) {
       const steps = TIMING_STEPS.map((ms) => ({ name: timingLabel(ms), tag: '', id: ms, ms }));
       section(list, 'Subtitle timing', steps, TIMING_STEPS.indexOf(t.subDelay), (i, r) => { engine.setSubtitleDelay(r.ms); });
@@ -86,6 +99,9 @@ export function createOptions({ host, engine }) {
     build();
     scroller.innerHTML = '';
     scroller.appendChild(list);
+    // The list is rebuilt after a pick (a tick moves, the Picture rows change their words): keep it where it was scrolled to,
+    // or the row just chosen would jump out of view.
+    if (scrollY) list.style.transform = 'translate3d(0,' + (-scrollY) + 'px,0)';
     let index = rows.findIndex((r) => r.id === wantId);
     if (index < 0) index = Math.min(at, rows.length - 1);
     focusRow(Math.max(0, index));
@@ -127,6 +143,7 @@ export function createOptions({ host, engine }) {
       root.appendChild(bar.el); root.appendChild(elapsed); root.appendChild(left);
       host.appendChild(root);
       offTracks = engine.on('tracks', () => { if (open) render(); });
+      offPicture = engine.on('picture', () => { if (open) render(); });
       // Alder focuses the first row of the Subtitles section ("subsFirst"): the picture's words are what people come for.
       wantId = 'Subtitles:off';
       render();
@@ -137,6 +154,7 @@ export function createOptions({ host, engine }) {
       if (!open) return;
       open = false;
       if (offTracks) offTracks();
+      if (offPicture) offPicture();
       if (root && root.parentNode) root.parentNode.removeChild(root);
       root = null;
       if (!silent && api.onClose) api.onClose();

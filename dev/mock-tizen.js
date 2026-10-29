@@ -81,6 +81,10 @@ export function buildTrackInfo(tracks, { style = 'matroska', indexing = 'per-typ
     let info;
     if (t.type === 'VIDEO') {
       info = { Width: String(t.width || 1920), Height: String(t.height || 1080), Bit_rate: String(t.bitrate || 8000000), fourCC: codecString(t.codec || 'HEVC', style) };
+      // what a file may say about its shape; Samsung documents neither name (a guess, like the rest of extra_info)
+      if (t.dar) info.display_aspect_ratio = String(t.dar);
+      if (t.par) info.pixel_aspect_ratio = String(t.par);
+      if (t.noshape) { delete info.Width; delete info.Height; }
     } else if (t.type === 'AUDIO') {
       info = { language: String(t.lang || 'und').toUpperCase(), channels: String(t.channels || 2), sample_rate: '48000', bitrate: String(t.bitrate || 0), fourCC: codecString(t.codec, style) };
     } else {
@@ -91,7 +95,7 @@ export function buildTrackInfo(tracks, { style = 'matroska', indexing = 'per-typ
 }
 
 /** Resolves "eac3+subs", a JSON array, or an array into [{type, ...}] (video first). */
-export function resolveTracks(spec, { video = 'HEVC', width = 1920, height = 1080 } = {}) {
+export function resolveTracks(spec, { video = 'HEVC', width = 1920, height = 1080, dar = null, par = null, noshape = false } = {}) {
   let audioText = [];
   if (Array.isArray(spec)) audioText = spec;
   else if (typeof spec === 'string' && spec.trim().charAt(0) === '[') audioText = JSON.parse(spec);
@@ -101,7 +105,7 @@ export function resolveTracks(spec, { video = 'HEVC', width = 1920, height = 108
     audioText = audioText.concat(preset);
   });
   const hasVideo = audioText.some((t) => t.type === 'VIDEO');
-  const list = hasVideo ? audioText : [{ type: 'VIDEO', codec: video, width, height }].concat(audioText);
+  const list = hasVideo ? audioText : [{ type: 'VIDEO', codec: video, width, height, dar, par, noshape }].concat(audioText);
   // audio first then text keeps the usual container order
   return list.slice().sort((a, b) => ({ VIDEO: 0, AUDIO: 1, TEXT: 2 }[a.type] - { VIDEO: 0, AUDIO: 1, TEXT: 2 }[b.type]) || 0);
 }
@@ -141,6 +145,8 @@ export const DEFAULT_SCENARIO = {
   indexing: 'per-type',    // per-type | global
   video: 'HEVC',
   width: 1920, height: 1080,
+  dar: null, par: null,    // the video's display / pixel aspect, when its extra_info says (mock.dar=2.39:1)
+  noshape: false,          // extra_info without Width and Height (a TV that does not say)
   media: 'sim',            // sim | video (a hidden <video> supplies time and pictures; the URL must really play)
   prepareMs: 150, startMs: 400, seekMs: 200,
 };
@@ -187,6 +193,9 @@ function applyOption(sc, key, value) {
     case 'indexing': sc.indexing = value; break;
     case 'video': sc.video = value.toUpperCase(); break;
     case 'res': { const m = /^(\d+)x(\d+)$/.exec(value); if (m) { sc.width = Number(m[1]); sc.height = Number(m[2]); } break; }
+    case 'dar': sc.dar = value; break;
+    case 'par': sc.par = value; break;
+    case 'noshape': sc.noshape = value === '1' || value === 'true'; break;
     case 'media': sc.media = value; break;
     case 'startMs': case 'prepareMs': case 'seekMs': sc[key] = num(value, sc[key]); break;
     default: break;
@@ -265,6 +274,9 @@ export class MockWebApiError extends Error {
   }
 }
 
+/** AVPlayDisplayMode: the only three values Samsung's AVPlay API reference lists. */
+export const DISPLAY_METHODS = ['PLAYER_DISPLAY_MODE_LETTER_BOX', 'PLAYER_DISPLAY_MODE_FULL_SCREEN', 'PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO'];
+
 const TICK_MS = 500; // oncurrentplaytime cadence
 
 /**
@@ -301,7 +313,7 @@ export function createAvplayMock({ clock = realClock, registry = createRegistry(
   const firedStalls = new Set();
   const calls = [];
   const props = {};
-  const display = { rect: [0, 0, 1920, 1080], method: 'PLAYER_DISPLAY_MODE_LETTER_BOX' };
+  const display = { rect: [0, 0, 1920, 1080], method: 'PLAYER_DISPLAY_MODE_LETTER_BOX', roi: [0, 0, 1, 1] };
   const subtitle = { silent: false, path: '', position: 0 };
   let videoEl = null;
 
@@ -422,10 +434,11 @@ export function createAvplayMock({ clock = realClock, registry = createRegistry(
       if (typeof u !== 'string' || !u) throw new MockWebApiError('TypeMismatchError', 'open needs a url string');
       url = u;
       scenario = scenarioFor(u, registry);
-      tracks = buildTrackInfo(resolveTracks(scenario.tracks, { video: scenario.video, width: scenario.width, height: scenario.height }), scenario);
+      tracks = buildTrackInfo(resolveTracks(scenario.tracks, { video: scenario.video, width: scenario.width, height: scenario.height, dar: scenario.dar, par: scenario.par, noshape: scenario.noshape }), scenario);
       const defaultAudio = tracks.filter((t) => t.type === 'AUDIO').findIndex((t) => t._spec.default);
       selected = { VIDEO: 0, AUDIO: tracks.some((t) => t.type === 'AUDIO') ? Math.max(0, defaultAudio) : -1, TEXT: -1 };
       pos = 0; speed = 1; started = false; frozen = false; completed = false; errored = false; suspended = false;
+      display.roi = [0, 0, 1, 1]; // a new session shows the whole frame
       firedStalls.clear();
       if (mediaVideo()) {
         videoEl = video ? video() : null;
@@ -521,7 +534,21 @@ export function createAvplayMock({ clock = realClock, registry = createRegistry(
       listener = l;
     },
     setDisplayRect(x, y, w, h) { record('setDisplayRect', arguments); need('setDisplayRect', ['IDLE', 'READY', 'PLAYING', 'PAUSED']); display.rect = [x, y, w, h]; },
-    setDisplayMethod(m) { record('setDisplayMethod', arguments); need('setDisplayMethod', ['IDLE', 'READY', 'PLAYING', 'PAUSED']); display.method = m; },
+    setDisplayMethod(m) {
+      record('setDisplayMethod', arguments);
+      need('setDisplayMethod', ['IDLE', 'READY', 'PLAYING', 'PAUSED']);
+      // Samsung documents three modes (AVPlayDisplayMode); anything else, CROPPED_FULL included, is not AVPlay's
+      if (DISPLAY_METHODS.indexOf(m) < 0) throw new MockWebApiError('InvalidValuesError', 'unknown display method ' + m);
+      display.method = m;
+    },
+    /** Samsung gives the signature (four ratios of the frame) and no behaviour; modelled as "show this part of the frame". */
+    setVideoRoi(x, y, w, h) {
+      record('setVideoRoi', arguments);
+      need('setVideoRoi', ['READY', 'PLAYING', 'PAUSED']);
+      const v = [x, y, w, h];
+      if (v.some((n) => typeof n !== 'number' || !Number.isFinite(n)) || x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > 1.0001 || y + h > 1.0001) throw new MockWebApiError('InvalidValuesError', 'setVideoRoi needs ratios inside the frame');
+      display.roi = v;
+    },
     setStreamingProperty(name, value) {
       record('setStreamingProperty', arguments);
       need('setStreamingProperty', ['IDLE', 'READY']);
@@ -574,7 +601,7 @@ export function createAvplayMock({ clock = realClock, registry = createRegistry(
       if (state === 'PLAYING' && mediaVideo() && videoEl) videoEl.play();
     },
     restoreAsync(u, resumeMs, prepare, ok) { avplay.restore(u, resumeMs); deliver(() => { if (typeof ok === 'function') ok(); }); },
-    enableAudioStream() {}, disableAudioStream() {}, setVideoRoi() {}, setLooping() {}, setSeamlessLooping() {}, setVideoStillMode() {}, setDisplayRotation() {},
+    enableAudioStream() {}, disableAudioStream() {}, setLooping() {}, setSeamlessLooping() {}, setVideoStillMode() {}, setDisplayRotation() {},
   };
 
   /** Everything a test or the dev console may inspect or force. Not part of Samsung's API. */

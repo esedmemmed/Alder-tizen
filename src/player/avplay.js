@@ -18,8 +18,27 @@
  *     (PLAYER_MSG_HTTP_ERROR_CODE through onevent, its data format is not documented).
  */
 
+import { fillRoi } from './picture.js';
+
 /** Screen size AVPlay's coordinates are always expressed in, whatever the page's CSS size (Samsung: "always 1920x1080"). */
 export const SCREEN = Object.freeze({ width: 1920, height: 1080 });
+
+/** The one display method Fit uses. LETTER_BOX keeps the aspect (ExoPlayer's "fit, never crop") and is what 0.1.0 ran on the TU8000. */
+export const FIT_METHOD = 'PLAYER_DISPLAY_MODE_LETTER_BOX';
+
+/**
+ * Whether the build offers Fill (a crop through setVideoRoi). OFF: Samsung documents setVideoRoi's signature and nothing
+ * else (no meaning for the numbers, no "since", no mention in the AVPlay guide), and no other AVPlay call can crop, so
+ * whether it works on a 2020 TU8000 is unknown. Flip it after the TV test in docs/TV-TEST.md; the dev build offers it
+ * with ?fill=1 so the screens and the mock can be exercised. docs/DECISIONS.md "Picture size".
+ */
+export const FILL_ENABLED = false;
+
+export function fillOffered() {
+  if (FILL_ENABLED) return true;
+  if (typeof __ALDER_DEV__ !== 'undefined' && __ALDER_DEV__ && typeof location !== 'undefined') return /[?&]fill=1/.test(location.search);
+  return false;
+}
 
 /** The text of whatever an AVPlay call threw or passed to an error callback, preferring an AVPlayError name. */
 export function errorCode(e) {
@@ -63,8 +82,10 @@ export function attachVideoObject(host, doc = document) {
  * createAvplay({ webapis, log })
  *   webapis  window.webapis (its .avplay is used)
  *   log      the app logger: log.info('avplay', message)
+ *   fill     whether Fill may be tried (default: fillOffered()); tests pass it explicitly
  */
-export function createAvplay({ webapis = typeof window !== 'undefined' ? window.webapis : undefined, log = null } = {}) {
+export function createAvplay({ webapis = typeof window !== 'undefined' ? window.webapis : undefined, log = null, fill = fillOffered() } = {}) {
+  let roiActive = false; // a crop is set on this session (a new session starts whole)
   let session = 0; // each open() starts a new one: callbacks of an earlier one are dropped
   let lastErrorText = '';
 
@@ -94,6 +115,7 @@ export function createAvplay({ webapis = typeof window !== 'undefined' ? window.
       const a = av();
       const mine = ++session;
       lastErrorText = '';
+      roiActive = false;
       const live = (fn) => (...args) => { if (mine === session && fn) fn(...args); };
       a.open(url);
       a.setListener({
@@ -112,12 +134,43 @@ export function createAvplay({ webapis = typeof window !== 'undefined' ? window.
       // The whole screen, in AVPlay's own 1920x1080 coordinates. The guide says to scale by 1920 / document width only to
       // place the video over a DOM element; this one fills the screen, so the numbers never change (DECISIONS.md).
       safe('setDisplayRect', () => a.setDisplayRect(0, 0, SCREEN.width, SCREEN.height));
-      safe('setDisplayMethod', () => a.setDisplayMethod('PLAYER_DISPLAY_MODE_LETTER_BOX')); // like ExoPlayer: fit, never crop
+      safe('setDisplayMethod', () => a.setDisplayMethod(FIT_METHOD)); // like ExoPlayer: fit, never crop
       // Alder passes the stream's request headers to ExoPlayer. AVPlay can only be told the User-Agent and the Cookie.
       const { supported, unsupported } = splitHeaders(headers);
       Object.keys(supported).forEach((name) => safe('setStreamingProperty ' + name, () => a.setStreamingProperty(name, supported[name])));
       if (unsupported.length) say('request headers AVPlay cannot send, stream may not play: ' + unsupported.join(', '));
       return { unsupportedHeaders: unsupported };
+    },
+
+    /** True when Fill can be tried: the build offers it and this firmware has setVideoRoi. */
+    get fillSupported() { return !!fill && !!(webapis && webapis.avplay && typeof webapis.avplay.setVideoRoi === 'function'); },
+
+    /**
+     * Fit or Fill for the session open now (call it after prepare, again whenever the choice changes). Fit is the display
+     * method set at open() with the whole frame; Fill crops the frame to the screen's shape with setVideoRoi and lets the
+     * same method fit what is left, so the picture is never stretched. Returns what is on the screen:
+     * { mode: 'fit' | 'fill', method, roi: [x, y, w, h] | null, reason } (reason: why Fill was not applied, else '').
+     */
+    setPicture(mode, shape) {
+      const fit = (reason = '') => ({ mode: 'fit', method: FIT_METHOD, roi: null, reason });
+      const whole = () => {
+        if (!roiActive) return true;
+        const ok = safe('setVideoRoi(whole)', () => { av().setVideoRoi(0, 0, 1, 1); return true; }, false);
+        if (ok) roiActive = false;
+        return ok;
+      };
+      if (mode !== 'fill') { whole(); return fit(); }
+      if (!api.fillSupported) { whole(); return fit('this TV cannot crop the picture'); }
+      const roi = fillRoi(shape);
+      if (!roi) {
+        whole();
+        return shape ? { mode: 'fill', method: FIT_METHOD, roi: null, reason: '' } : fit("this file doesn't say its shape");
+      }
+      const ok = safe('setVideoRoi', () => { av().setVideoRoi(roi[0], roi[1], roi[2], roi[3]); return true; }, false);
+      if (!ok) return fit('the TV refused the crop');
+      roiActive = true;
+      say('setVideoRoi(' + roi.join(', ') + ')');
+      return { mode: 'fill', method: FIT_METHOD, roi, reason: '' };
     },
 
     /**

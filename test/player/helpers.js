@@ -14,7 +14,7 @@ import { createLogger } from '../../src/lib/log.js';
 import { createDiag } from '../../src/player/diag.js';
 import { fixtureJson } from '../core/helpers.js';
 
-export const EVENTS = ['loading', 'started', 'playing', 'scrub', 'meta', 'tracks', 'subtitle', 'skip', 'upNext', 'upNextHide', 'stall', 'stallHide', 'sourceError', 'notice', 'navigate'];
+export const EVENTS = ['loading', 'started', 'playing', 'scrub', 'meta', 'tracks', 'subtitle', 'picture', 'skip', 'upNext', 'upNextHide', 'stall', 'stallHide', 'sourceError', 'notice', 'navigate'];
 
 /** A Stream the way add-ons give them: name (what the release is called), a media URL with `mock.*` options. */
 export function stream(name, options = {}, extra = {}) {
@@ -38,7 +38,7 @@ export function libraryItem(overrides = {}) {
 }
 
 /**
- * makeEngine({ sources, params, item, saved, meta, http, settings: { audioLang, subtitles }, tvLanguage, libraryDelay })
+ * makeEngine({ sources, params, item, saved, meta, http, settings: { audioLang, subtitles, pictureSize }, fill (offer Fill: the build flag is off), tvLanguage, libraryDelay })
  * -> { engine, clock, av (the AVPlay mock), events (name -> [data]), log (array of lines), stremio, puts, store, diag, start(), at(ms) }
  */
 export function makeEngine(opts = {}) {
@@ -47,11 +47,12 @@ export function makeEngine(opts = {}) {
   const av = createAvplayMock({ clock, registry });
   const lines = [];
   const log = createLogger({ echo: (level, entry) => { lines.push(level + ' ' + entry.tag + ' ' + entry.msg); } });
-  const avplay = createAvplay({ webapis: { avplay: av }, log });
+  const avplay = createAvplay({ webapis: { avplay: av }, log, fill: opts.fill });
   const store = createStore({ storage: memoryStorage() });
   const settings = createSettings({ store, activeProfileId: () => 'p1', tvLanguage: () => opts.tvLanguage || 'en' });
   if (opts.settings && opts.settings.audioLang) store.set('settings/audioLang@p1', opts.settings.audioLang);
   if (opts.settings && opts.settings.subtitles === false) store.set('settings/subtitles', false);
+  if (opts.settings && opts.settings.pictureSize) store.set('settings/pictureSize@p1', opts.settings.pictureSize);
   const library = createLibrary({ now: () => 1700000000000 + clock.now() });
   const memory = createSourceMemory(store);
   const puts = [];

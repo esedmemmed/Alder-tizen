@@ -19,6 +19,7 @@ export function urlParts(url) {
 export function createDiag({ now = Date.now, limit = 60 } = {}) {
   let stream = null;
   let rawTracks = null;
+  let picture = null;
   let decisions = [];
   let errors = [];
 
@@ -28,7 +29,10 @@ export function createDiag({ now = Date.now, limit = 60 } = {}) {
       const { host, file } = urlParts(info.url);
       stream = { host, file, label: info.label || '', at: info.at, total: info.total, openedAt: now(), headers: info.headers || [] };
       rawTracks = null;
+      picture = null;
     },
+    /** The picture of this stream: the engine's pictureInfo() (the source's shape, Fit / Fill asked for and what was applied). */
+    setPicture(info) { picture = info; },
     /** AVPlay's getTotalTrackInfo() as it came, so the first TV test tells us the real shape. */
     setTracks(raw) { rawTracks = raw; },
     /** One line per decision: "audio: chose #1 AC3 (...)". */
@@ -40,8 +44,8 @@ export function createDiag({ now = Date.now, limit = 60 } = {}) {
       errors.push({ t: now(), text });
       if (errors.length > limit) errors = errors.slice(errors.length - limit);
     },
-    snapshot() { return { stream, rawTracks, decisions: decisions.slice(), errors: errors.slice() }; },
-    clear() { stream = null; rawTracks = null; decisions = []; errors = []; },
+    snapshot() { return { stream, rawTracks, picture, decisions: decisions.slice(), errors: errors.slice() }; },
+    clear() { stream = null; rawTracks = null; picture = null; decisions = []; errors = []; },
   };
 }
 

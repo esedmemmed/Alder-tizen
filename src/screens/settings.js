@@ -13,6 +13,7 @@ import { h, clear } from '../lib/dom.js';
 import { VERSION } from '../lib/env.js';
 import { languageName } from '../core/lang.js';
 import { STREAMING, PICTURE_AND_SOUND, SUBTITLES, ADVANCED, PRESET_HINT } from '../core/settings.js';
+import { fillOffered } from '../player/avplay.js';
 import { iconSvg } from '../ui/icons.js';
 import { openPanel } from '../ui/panel.js';
 import { createTvLanguage } from '../player/language.js';
@@ -172,7 +173,8 @@ export function createSettingsScreen() {
         break;
       }
       case 'picture':
-        PICTURE_AND_SOUND.forEach(choiceRow);
+        // Picture size is a choice between Fit and Fill; with Fill not offered (docs/DECISIONS.md) there is nothing to choose
+        PICTURE_AND_SOUND.filter((c) => c.key !== 'pictureSize' || fillOffered()).forEach(choiceRow);
         note('Advanced');
         ADVANCED.forEach(choiceRow);
         break;

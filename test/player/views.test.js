@@ -40,7 +40,7 @@ test('the Diagnostics report: device, stream host and file (never the query), ra
   log.warn('player', 'seek failed');
   const report = buildReport({ log, diag: diag.snapshot(), device: tu8000Profile(), version: '1.2.3', env: 'test', agent: 'UA' });
   const text = report.map((s) => s.title + '\n' + s.lines.map((l) => l.text).join('\n')).join('\n');
-  assert.deepEqual(report.map((s) => s.title.split(' (')[0]), ['APP', 'DEVICE', 'STREAM', 'AVPLAY TRACKS', 'AUDIO AND SOURCE DECISIONS', 'PLAYER ERRORS', 'LOG']);
+  assert.deepEqual(report.map((s) => s.title.split(' (')[0]), ['APP', 'DEVICE', 'STREAM', 'PICTURE', 'AVPLAY TRACKS', 'AUDIO AND SOURCE DECISIONS', 'PLAYER ERRORS', 'LOG']);
   assert.match(text, /Alder 1\.2\.3 \(test\)/);
   assert.match(text, /2160p HDR HEVC/);
   assert.match(text, /source 2 of 3/);
