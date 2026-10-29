@@ -27,6 +27,19 @@
   --pane: rgba(22, 19, 16, 0.94);               /* a panel over art: Alder frosts the art behind; with no backdrop-filter here it is near-opaque */
   --shade: rgba(14, 12, 10, 0.92);              /* the shades over art, 0xEB-0xF7 of BASE */
 
+  /* focus language (v0.2): ONE solid warm-white fill with dark ink wherever the remote rests. Alder rims/tints; the owner asked for
+     a filled, Netflix-like focus (DECISIONS.md 2026-10-29 "Focused items are filled"). Contrast against --focus-fill:
+     --focus-ink 15.5:1, --focus-ink-2 8.3:1, --focus-accent 8.1:1 (all >= 7:1, checked by dev/scenarios/v02-focus.mjs). */
+  --focus-fill: #f2e8d8;                        /* the solid fill behind the focused item */
+  --focus-ink: #15110e;                         /* text and icons on it */
+  --focus-ink-2: #4a4036;                       /* secondary text and tags on it (TEXT_2 / TEXT_3 on the dark) */
+  --focus-accent: #5c3d0e;                      /* what is tungsten on the dark (ticks, dots, "THIS PROFILE") once the fill is behind it */
+  --focus-edge: rgba(21, 17, 14, 0.34);         /* outlines of tags and badges on the fill */
+  --focus-glow: rgba(243, 217, 177, 0.55);      /* the stronger glow behind a focused primary pill */
+  --sel-fill: rgba(255, 255, 255, 0.14);        /* current / selected, not focused: translucent fill */
+  --chip-edge: rgba(255, 240, 220, 0.3);        /* an idle chip is an outline only */
+  --glass-dark: rgba(20, 17, 14, 0.55);         /* an idle round button: dark glass */
+
   /* type: sp x 2 (px), with Alder's LEADING table for the line heights */
   --font-sans: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --font-serif: 'Instrument Serif', Georgia, 'Times New Roman', serif;
@@ -48,6 +61,8 @@
   --chip-h: 48px;              /* CHIP_H 24 */
   --card-grow: 1.08;           /* CARD_GROW (PLAN.md said 1.06; Alder's constant wins) */
   --chip-grow: 1.04;           /* CHIP_GROW */
+  --btn-grow: 1.10;            /* a focused round icon button */
+  --pill-grow: 1.06;           /* a focused primary pill */
   --card-gap: 28px;            /* CARD_GAP 14 */
   --poster-w: 176px;           /* POSTER_W 88 */
   --poster-h: 264px;           /* POSTER_H 132 */
@@ -62,5 +77,7 @@
 
   /* motion: transform and opacity only */
   --t-focus: 150ms;            /* grow() duration */
+  --t-fill: 140ms;             /* a focus fill fading in (its ::before layer's opacity) */
+  --t-slide: 180ms;            /* the top-bar highlight sliding to the focused tab */
   --t-fade: 260ms;             /* leftShade fade */
 }

@@ -5,6 +5,7 @@
 import { h } from '../../lib/dom.js';
 import { IS_DEV } from '../../lib/env.js';
 import { iconSvg } from '../icons.js';
+import '../navhl.js'; // Search's top bar slides its focus highlight too (installs itself)
 import { sharp } from '../../lib/images.js';
 import { wallClockText } from '../../player/controls.js';
 
@@ -93,7 +94,7 @@ export const imdbTag = () => h('span', { class: 'b-imdb' }, 'IMDb');
 
 /** The avatar disc with the profile's initial (Alder's top-left glass circle). */
 export function avatar(profile) {
-  return h('div', { class: 'avatar b-avatar', 'data-focus': '', tabindex: '-1', role: 'button' }, profile && profile.name ? profile.name.charAt(0).toUpperCase() : 'A');
+  return h('div', { class: 'avatar b-avatar', 'data-focus': '', tabindex: '-1', role: 'button', 'aria-label': 'Profile' }, profile && profile.name ? profile.name.charAt(0).toUpperCase() : 'A');
 }
 
 /**

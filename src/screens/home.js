@@ -23,6 +23,7 @@ import { createRow } from '../ui/row.js';
 import { createCard, disposeCard } from '../ui/card.js';
 import { chip } from '../ui/chip.js';
 import { pill } from '../ui/button.js';
+import '../ui/navhl.js'; // the top bar's sliding focus highlight (installs itself)
 import { openPanel } from '../ui/panel.js';
 import { createArt } from '../ui/art.js';
 import { runClock } from '../app/clock.js';
