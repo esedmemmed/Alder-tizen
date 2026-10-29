@@ -45,3 +45,45 @@ Paths: `src/player/*.js` (not player.css), `src/core/settings.js`, `src/screens/
 
 ## C. Release (manager)
 Review both, run everything, version **0.2.0** (config.xml, package.json), build, `release/Alder.wgt` + `release/README.md` table, push. CHANGELOG.md entry.
+
+---
+
+## D. Player fixes and polish (agent "player-polish", Sonnet) — after A and B are merged
+
+Owner's TV photo (0.1.0, 2026-10-29): player control buttons are **empty circles** — no icons (Play/Pause, subtitles,
+layers, next episode, info). The "Play" label shows, so the buttons exist; the inline SVG icons do not render on the TV's
+Chromium M69 engine although they render in desktop Chromium.
+
+1. **Icons that render on the TV.** Find the M69 cause if you can (inline `<svg>` via innerHTML in `src/ui/icons.js` +
+   `.icon svg {width:100%;height:100%}` in base.css). Whatever the cause, make icons robust everywhere (player, title page,
+   top nav search, menus, cards): e.g. `<svg>` with explicit `xmlns`, `width`/`height` attributes and `viewBox`, created
+   with `document.createElementNS` instead of innerHTML, and a fixed-size wrapper; or data-URI SVG `<img>` per colour.
+   Pick the approach least likely to fail on M69 and record why in DECISIONS.md. Add an "Icons" line to Diagnostics that
+   draws every icon in a row, so a TV photo shows at once whether icons render.
+2. **Back to Play/Pause.** Whenever the controls are shown — after closing Audio & subtitles (Back), after a seek, after
+   any panel or card (Up Next, stall offer, sources) closes, and every time the controls reappear — focus returns to the
+   Play/Pause button. OK on Play/Pause toggles. While the controls are hidden, OK = show controls with Play/Pause focused;
+   the Play/Pause media key toggles at once without showing the full controls.
+3. **Centre play/pause glyph (Netflix-like).** On pause: a large clean pause/play glyph in a dark translucent circle at the
+   centre of the picture, fading in 120 ms; on resume: a short play glyph that fades out after ~600 ms. Transform/opacity
+   only.
+4. Keep everything Alder-consistent otherwise (controls layout, labels). Tests for the focus-return rules (non-DOM where
+   possible) and screenshots `shots/v02/player-*.png` (controls with icons focused/unfocused, centre glyph paused, after
+   closing options focus on Play/Pause).
+
+Paths: `src/ui/icons.js`, `src/ui/styles/base.css` (icon rules only), `src/player/*`, `src/screens/diagnostics.js`,
+`test/player/`, `dev/scenarios/v02-player.mjs`.
+
+## E. Faster, smoother page switching (agent "pages", Sonnet) — after A is merged
+
+Owner: switching Home ↔ Shows ↔ Movies ↔ My List is "not so fast". Measure first at 4× CPU throttle (time from the key
+press on a nav tab to the new page's first row painted, and to the hero art), then:
+- Switch instantly to the page's saved answer (kept catalogs) and fade/slide the rows in (transform/opacity, ≤ 180 ms);
+  fetch fresh in the background and patch rows without rebuilding the page.
+- Keep built pages alive (hidden) after the first visit instead of rebuilding them, within the card-node budget
+  (virtualise off-screen pages).
+- Debounce: moving across tabs quickly must not build every page in between (build after ~150 ms on a tab, or on OK).
+- Pre-warm Shows and Movies catalogs after Home settles (Alder's `warmPages`).
+Target: tab switch to first row < 150 ms at 4× throttle from kept answers. Report before/after numbers.
+Paths: `src/screens/home.js`, `src/app/home-model.js`, `src/ui/row.js`, `src/ui/styles/home.css`, `test/app/`,
+`dev/scenarios/v02-pages.mjs`.
