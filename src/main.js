@@ -10,11 +10,18 @@ import { attachKeys, registerKeys } from './lib/keys.js';
 import { createFocusEngine } from './lib/focus.js';
 import { createRouter } from './lib/router.js';
 import { appImages } from './lib/images.js';
+import { createStore } from './lib/store.js';
+import { appHttp } from './lib/http.js';
 import { createToaster } from './ui/toast.js';
-import { demoScreens } from './ui/demo.js';
+import { createSession } from './app/session.js';
+import { firstScreen, playerNavigation } from './app/navigation.js';
+import { createTvLanguage } from './player/language.js';
 import { playerScreens } from './player/screen.js';
 import { diagnosticsScreens } from './screens/diagnostics.js';
-import { demoPlayerServices } from './player/demo.js';
+import { screensB } from './screens/index.js';
+import { profilesScreens } from './screens/profiles.js';
+import { signinScreens } from './screens/signin.js';
+import { homeScreens } from './screens/home.js';
 
 export function boot() {
   installGlobalHandlers(window, log);
@@ -34,10 +41,14 @@ export function boot() {
   if (IS_DEV) new URLSearchParams(window.location.search).forEach((v, k) => { params[k] = v; });
 
   const context = { engine, toast, images: appImages(), overlayHost: overlayEl, log };
-  context.player = demoPlayerServices(log); // TEMP for Phase 4 to replace: the real services (profile, settings, library, session)
+  // The app's services (docs/CONTEXT.md context.session): profiles, settings, add-ons, library, the source finder.
+  const session = createSession({
+    store: createStore(), http: appHttp(), webapis: window.webapis, log, tvLanguage: createTvLanguage({ log }).get,
+  });
+  context.session = session;
   const router = createRouter({
     root: appEl,
-    screens: Object.assign({}, demoScreens, playerScreens, diagnosticsScreens),
+    screens: Object.assign({}, screensB, profilesScreens, signinScreens, homeScreens, playerScreens, diagnosticsScreens),
     context,
     onExit: () => {
       // Back at the bottom of the stack leaves the app.
@@ -55,6 +66,12 @@ export function boot() {
     log,
   });
   context.router = router;
+  // What src/player/screen.js reads (its engine's services), from the session. The auth key follows the profile in use.
+  context.player = {
+    settings: session.settings, library: session.books, memory: session.memory, device: session.device, http: session.http,
+    stremio: session.stremio, loadMeta: (type, id) => session.meta(type, id), onNavigate: playerNavigation(router),
+  };
+  Object.defineProperty(context.player, 'authKey', { get: () => session.authKey(), enumerable: true });
 
   // The remote: arrows move focus, OK clicks, hold OK sends 'alder:hold'; screens and dialogs see every key first.
   attachKeys({
@@ -71,7 +88,14 @@ export function boot() {
   // The TV hides the app (Home key, another source): AVPlay is suspended by the player in Phase 3; here, log it.
   document.addEventListener('visibilitychange', () => log.info('app', document.hidden ? 'hidden' : 'visible'));
 
-  router.push('home', { clock: params.clock });
+  // Dev only (?profile=fixture): the fixture account's profile, so a scenario can start at Home without walking through sign-in.
+  if (typeof __ALDER_DEV__ !== 'undefined' && __ALDER_DEV__ && params.profile === 'fixture' && !session.profiles.all().length) {
+    session.profiles.add('Enough', 'FIXTURE-AUTH-KEY-0001');
+  }
+  // No profile: sign in. Several (or one with a PIN): who's watching. One plain profile: straight to Home.
+  const first = firstScreen(session.profiles);
+  if (first.open) session.profiles.setActive(first.open.id);
+  router.push(first.name, first.params);
   if (IS_DEV) {
     window.__alder = { router, engine, log, context };
     // The mock's application.exit() has no TV to close: say what would have happened.
