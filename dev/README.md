@@ -11,7 +11,7 @@ and `npm run build` check for `__fx`, `mock-tizen`, `ALDER_FIXTURE` and source m
 | `fake-clock.js` | `createFakeClock()` for tests: timers fire only when the test advances time |
 | `fixture-server.mjs` | serves the dev build and answers every "remote" request from `dev/fixtures/` |
 | `screenshot.mjs` | headless Chromium at 1920x1080: presses remote keys, checks the screen, saves PNGs to `shots/` |
-| `scenarios/*.mjs` | what `screenshot.mjs` runs, one file per phase |
+| `scenarios/*.mjs` | what `screenshot.mjs` runs, one file per phase (`phase5.mjs`: the whole journey from a fresh install to Diagnostics, and the 4x performance numbers) |
 | `fixtures/` | Phase 2's fake Stremio account and add-ons (see `fixtures/README.md`) |
 
 ## Scripts
@@ -69,6 +69,10 @@ Other endpoints: `/__fx/_health`, `/__fx/_requests` (the log of what was asked, 
 - `getTotalTrackInfo()` returns `[{ index, type: 'VIDEO'|'AUDIO'|'TEXT', extra_info: '<JSON string>' }]`
 
 By default the clock is the real one. Tests pass `createFakeClock()` and `await clock.advance(ms)`.
+
+Like the real player, the mock goes quiet at `close()` and `stop()`: every pending timer (prepare answer, seek answer, the picture
+starting, a stall ending, queued events) is cancelled and nothing is delivered afterwards, so a late answer of an old session can
+never reach a new one. `avplay.__mock.pendingTimers` is 0 after a close; `test/player/engine.close.test.js` leans on it.
 
 ### Choosing what a URL does
 
