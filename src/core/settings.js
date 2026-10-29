@@ -1,7 +1,7 @@
 // Port of the `object Settings` and the choice lists / presets of Alder's SettingsActivity.kt.
 //
 // Choices kept on this TV. Most are shared by every profile (they're about the TV and the sound system); taste (release
-// type, dubs and audio language) is kept per profile under "key@profileId".
+// type, dubs, audio language and picture size) is kept per profile under "key@profileId".
 //
 // Dropped for Tizen (PLAN.md section 1): matchFrameRate (AVPlay can't switch display modes) and passthrough (the TU8000
 // can't pass DTS/TrueHD to a receiver), so the receiver term of Alder's preference() score is gone too. Added: `av1`
@@ -34,6 +34,10 @@ export const PICTURE_AND_SOUND = [
     [['', 'TV language'], ['en', 'English'], ['hi', 'Hindi'], ['es', 'Spanish'], ['fr', 'French'], ['de', 'German'], ['ja', 'Japanese'], ['ko', 'Korean']], true),
   choice('dub', 'Dubbed releases', "Original first puts dubbed releases last; My language first uses this profile's audio language.",
     [['', 'No preference'], ['original', 'Original first'], ['mine', 'My language first']], true),
+  // Tizen only (v0.2). Fit shows the whole picture, with black bars when the film is wider than the TV; Fill zooms in until
+  // the picture covers the screen and cuts what overflows (never stretches it). Changeable while watching, which saves it here.
+  choice('pictureSize', 'Picture size', 'Fit shows the whole picture. Fill zooms in to cover the screen and cuts the edges of the film.',
+    [['fit', 'Fit'], ['fill', 'Fill']], true),
 ]
 
 export const SUBTITLES = [
@@ -89,6 +93,8 @@ export function createSettings({ store, activeProfileId = () => null, tvLanguage
     release: () => typed(Settings.profileKey('release'), ''),
     /** "": no preference, "original": dubs last, "mine": the audio language first. */
     dub: () => typed(Settings.profileKey('dub'), ''),
+    /** "fit" (the whole picture, bars when the shapes differ) or "fill" (zoomed to cover the screen). Per profile. */
+    pictureSize: () => (typed(Settings.profileKey('pictureSize'), 'fit') === 'fill' ? 'fill' : 'fit'),
     alwaysList: () => typed(KEYS.setting('alwaysList'), false),
     subtitles: () => typed(KEYS.setting('subtitles'), true),
     /** Two-letter code of the dub to start with: the TV's language unless one is picked. */
@@ -102,7 +108,7 @@ export function createSettings({ store, activeProfileId = () => null, tvLanguage
 
     /** A removed profile's taste goes with it, so a new profile in its place starts with none. */
     forget(profileId) {
-      ['release', 'dub', 'audioLang'].forEach(n => store.remove(KEYS.profileSetting(n, profileId)))
+      ['release', 'dub', 'audioLang', 'pictureSize'].forEach(n => store.remove(KEYS.profileSetting(n, profileId)))
     },
 
     // ---- for the Settings screen ----
