@@ -216,4 +216,78 @@ export default [
       expect(!missing.length, 'every request had a fixture (' + missing.join(', ') + ')');
     },
   },
+  {
+    // The PLAN section 2 budget, read with `npm run shots -- --only phase5-perf --throttle 4` (4x CPU slowdown as a TU8000
+    // stand-in): the first Home paint from kept answers < 2.5 s, a focus move < 50 ms. The other numbers are reported.
+    name: 'phase5-perf',
+    dir: 'phase5',
+    url: '/?profile=fixture&clock=11:26%20PM',
+    async run(api) {
+      const { page, expect, press, wait, throttle } = api;
+      const say = (m) => console.log('  PERF ' + m);
+      await homeReady(page); // a first visit: the add-ons, the library and the catalogs are kept for the next start
+
+      // 1. cold start with kept answers: reload, and mark the first paint with a Continue card and the hero's name
+      await page.addInitScript(() => {
+        window.__perf = { marks: {} };
+        const mark = (name) => { if (!window.__perf.marks[name]) requestAnimationFrame(() => requestAnimationFrame(() => { window.__perf.marks[name] = performance.now(); })); };
+        new MutationObserver(() => {
+          if (document.querySelector('[data-focus-group="hm-continue"] .card')) mark('card');
+          const n = document.querySelector('.hm-name');
+          if (n && n.textContent) mark('hero');
+          if (document.querySelector('.card-img.on')) mark('art');
+        }).observe(document, { childList: true, subtree: true, attributes: true });
+      });
+      await page.reload({ waitUntil: 'load' });
+      await page.waitForFunction(() => window.__perf && window.__perf.marks.card && window.__perf.marks.hero, null, { timeout: 20000 });
+      await wait(1500);
+      const cold = await page.evaluate(() => Object.assign({}, window.__perf.marks, { fcp: (performance.getEntriesByName('first-contentful-paint')[0] || {}).startTime }));
+      say('cold start, kept answers -> first Continue card ' + Math.round(cold.card) + ' ms, hero name ' + Math.round(cold.hero) + ' ms, first art ' + Math.round(cold.art || -1) + ' ms (first contentful paint ' + Math.round(cold.fcp || -1) + ' ms)');
+      expect(cold.card < 2500 && cold.hero < 2500, 'first Home paint from kept answers is under 2.5 s: ' + Math.round(Math.max(cold.card, cold.hero)) + ' ms (throttle ' + throttle + 'x)');
+
+      // 2. a focus move
+      await page.waitForFunction(() => document.querySelectorAll('[data-focus-group="hm-continue"] .card').length > 1, null, { timeout: 5000 });
+      const move = await page.evaluate(() => {
+        const e = window.__alder.engine;
+        const t0 = performance.now();
+        for (let i = 0; i < 10; i++) e.move('right');
+        for (let i = 0; i < 10; i++) e.move('left');
+        return (performance.now() - t0) / 20;
+      });
+      say('focus move ' + move.toFixed(2) + ' ms average');
+      expect(move < 50, 'a focus move takes ' + move.toFixed(2) + ' ms (budget 50 ms)');
+
+      // 3. Home -> title page: OK on a Continue card until the title page has its Resume button painted
+      const timeIt = (trigger, ready) => page.evaluate(([t, r]) => new Promise((resolve, reject) => {
+        const t0 = performance.now();
+        const done = () => requestAnimationFrame(() => requestAnimationFrame(() => { obs.disconnect(); resolve(performance.now() - t0); }));
+        const obs = new MutationObserver(() => { if (eval(r)) done(); });
+        obs.observe(document, { childList: true, subtree: true, attributes: true });
+        setTimeout(() => { obs.disconnect(); reject(new Error('never ready: ' + r)); }, 15000);
+        eval(t);
+      }), [trigger, ready]);
+      const toTitle = await timeIt("window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true })); window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, bubbles: true }))", "!!document.querySelector('.dt-buttons .pill')");
+      say('Home -> title page (OK to the Resume button painted): ' + Math.round(toTitle) + ' ms');
+      expect(toTitle < 1500, 'Home to the title page: ' + Math.round(toTitle) + ' ms');
+      await wait(1200);
+
+      // 4. title -> sources list: the list asked for (held OK on Resume), through to its first painted row
+      const toList = await timeIt("window.__alder.router.push('streams', { type: 'movie', id: 'tt15239678', videoId: 'tt15239678', name: 'Dune: Part Two', pick: true })", "!!document.querySelector('.st-row')");
+      say('title -> sources list (the screen asked for, to its first row painted): ' + Math.round(toList) + ' ms');
+      expect(toList < 2500, 'title to the sources list: ' + Math.round(toList) + ' ms');
+      const rowMove = await page.evaluate(() => { const e = window.__alder.engine; const t0 = performance.now(); for (let i = 0; i < 6; i++) e.move('down'); for (let i = 0; i < 6; i++) e.move('up'); return (performance.now() - t0) / 12; });
+      say('moving down the sources list ' + rowMove.toFixed(2) + ' ms per move');
+      expect(rowMove < 50, 'a move in the sources list takes ' + rowMove.toFixed(2) + ' ms');
+      await page.evaluate(() => window.__alder.router.pop());
+      await wait(300);
+
+      // 5. Play pressed on the title page: the sources page finds, ranks and starts the player
+      const toPlayer = await timeIt("window.__alder.router.push('streams', { type: 'movie', id: 'tt15239678', videoId: 'tt15239678', name: 'Dune: Part Two' })", "(window.__alder.router.top() || {}).name === 'player'");
+      say('Play -> player screen mounted (find sources, rank, open the player): ' + Math.round(toPlayer) + ' ms');
+      expect(toPlayer < 2500, 'Play to the player: ' + Math.round(toPlayer) + ' ms');
+      expect((await page.evaluate(() => document.querySelectorAll('.card').length)) <= 150, 'card nodes stay under 150');
+      await page.evaluate(() => window.__alder.router.pop());
+      await wait(300);
+    },
+  },
 ];
