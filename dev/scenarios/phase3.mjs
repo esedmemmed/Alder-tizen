@@ -32,6 +32,9 @@ export default [
     url: CLOCK,
     async run(api) {
       const { page, press, shot, expect, wait } = api;
+      // The fixture server's placeholder "logo" is just the IMDb id in big type; stand in a real-looking wordmark instead
+      await page.route('**/images.metahub.space/logo/**', (route) => route.fulfill({ status: 200, contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="150" viewBox="0 0 900 150"><text x="0" y="110" font-family="Georgia,serif" font-size="100" letter-spacing="6" fill="#f3eee6">SEVERANCE</text></svg>' }));
       await playDemo(api);
       expect((await names(page)) === 'home,stub,player', 'Play opens the player on top of the title page (' + (await names(page)) + ')');
 
@@ -40,7 +43,7 @@ export default [
       expect(/trying the next one/.test(await text(page, '.pl-status')), 'a failover message: "' + (await text(page, '.pl-status')) + '"');
       await shot('01-failover');
 
-      await page.waitForFunction(() => !!document.querySelector('.pl-loading') && document.querySelector('.pl-loading').style.display === 'none', null, { timeout: 9000 });
+      await page.waitForFunction(() => window.__alder.router.top().screen.engine && window.__alder.router.top().screen.engine() && window.__alder.router.top().screen.engine().state.started, null, { timeout: 12000 });
       expect(!(await visible(page, '.pl-loading')), 'the picture is up: the loading overlay is gone');
       expect(!(await visible(page, '.pl-controls.on')), 'playing: the controls are down');
 
@@ -53,6 +56,8 @@ export default [
       expect(/^\d+:\d\d$/.test(await text(page, '.pl-elapsed')) && /^−/.test(await text(page, '.pl-length')), 'times: ' + (await text(page, '.pl-elapsed')) + ' and ' + (await text(page, '.pl-length')));
       expect((await text(page, '.pl-clock')) === '11:26 PM', 'the clock shows what ?clock= says');
       await wait(400);
+      expect(await page.evaluate(() => { const l = document.querySelector('.pl-logo'); return l && l.style.display !== 'none' && l.naturalWidth > 0; }), 'the title\'s logo shows top left');
+      expect(!/^tt\d+/.test(await page.evaluate(() => document.querySelector('.pl-topname').textContent)), 'the name fallback is never an id');
       await shot('02-controls-paused');
 
       // Up: the bar takes focus; Right scrubs 10 s after the presses settle
@@ -83,7 +88,7 @@ export default [
       const { page, press, shot, expect, wait } = api;
       // Dune: its add-on subtitle files are in the fixtures (the demo's Severance has no files behind its subtitle list)
       await openPlayer(page, Object.assign({}, DUNE, { sources: [stream('Torrentio (1080p)', 'Dune.Part.Two.2024.1080p.WEB-DL.DTS.DDP5.1.mkv', { tracks: 'mixed+subs', duration: 9960 })] }));
-      await page.waitForFunction(() => !!document.querySelector('.pl-loading') && document.querySelector('.pl-loading').style.display === 'none', null, { timeout: 12000 });
+      await page.waitForFunction(() => window.__alder.router.top().screen.engine && window.__alder.router.top().screen.engine() && window.__alder.router.top().screen.engine().state.started, null, { timeout: 14000 });
       await press('ok'); // pause, controls up on Play
       await press('left', 2); // Play -> Change stream -> Audio & subtitles
       expect((await page.evaluate(() => document.querySelector('.pl-btn.focus').getAttribute('aria-label'))) === 'Audio & subtitles', 'focus moved to Audio & subtitles');
@@ -162,7 +167,7 @@ export default [
     async run(api) {
       const { page, press, shot, expect, wait } = api;
       await playDemo(api);
-      await page.waitForFunction(() => !!document.querySelector('.pl-loading') && document.querySelector('.pl-loading').style.display === 'none', null, { timeout: 12000 });
+      await page.waitForFunction(() => window.__alder.router.top().screen.engine && window.__alder.router.top().screen.engine() && window.__alder.router.top().screen.engine().state.started, null, { timeout: 14000 });
       await press('back'); // a Back with the controls down leaves the player
       await wait(300);
       expect((await names(page)) === 'home,stub', 'back on the title page');
