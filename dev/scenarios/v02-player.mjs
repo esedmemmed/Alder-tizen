@@ -3,7 +3,7 @@
  *   - icons: every <svg> on screen has a non-zero box, a numeric width and height and a sized .icon wrapper (the 0.1.0 player's
  *     buttons were empty circles on the TV: a bare <svg> in a flex circle collapsed there), on Home, the title page, Search,
  *     Settings, Diagnostics and every player surface; the Diagnostics ICONS block draws all of them three ways;
- *   - focus returns to Play/Pause: when the controls come up, after Audio & subtitles and Info close, after a seek;
+ *   - focus returns to Play/Pause: when the controls come up (Left/Right while hidden are the quick seek: bar focused, first step at once), after Audio & subtitles and Info close, after a seek;
  *   - OK toggles, OK while hidden brings the controls up on Play/Pause, the Play/Pause media key toggles with the controls down;
  *   - the centre glyph: pause fades in at the centre while paused, play flashes on resume and fades (transform/opacity only);
  *   - Back at the bottom of the stack asks "Exit Alder?" (Stay focused) before leaving.
@@ -165,8 +165,8 @@ export default [
       await play(page);
       const onPlay = async () => { const l = await focusLabel(page); return l === 'Pause' || l === 'Play'; };
 
-      // every arrow that brings the controls up from hidden lands on Play/Pause (it used to be the bar)
-      for (const key of ['left', 'right', 'up', 'down']) {
+      // Up and Down bring the controls up on Play/Pause; Left and Right are the quick seek (next block)
+      for (const key of ['up', 'down']) {
         await press(key);
         expect((await controlsUp(page)) && (await onPlay()), key + ' while hidden brings the controls up on Play/Pause (' + (await focusLabel(page)) + ')');
         await press('back'); // Back hides them
@@ -174,8 +174,30 @@ export default [
         await wait(300);
       }
 
+      // the quick seek: Right while hidden shows the controls with the bar focused AND steps 10 s at once; 1.2 s after, Play/Pause
+      const t0 = (await engineState(page)).position;
+      await page.keyboard.press('ArrowRight');
+      await wait(150);
+      let t1 = (await engineState(page)).position;
+      expect((await controlsUp(page)) && (await focusLabel(page)) === 'bar', 'Right while hidden shows the controls with the bar focused (' + (await focusLabel(page)) + ')');
+      expect(t1 - t0 >= 9500 && t1 - t0 < 12000, 'and has stepped 10 s at once (' + Math.round((t1 - t0) / 1000) + ' s)');
+      await shot('player-08-quick-seek-bar');
+      await page.keyboard.press('ArrowRight');
+      await wait(150);
+      expect((await engineState(page)).position - t1 >= 9500 && (await focusLabel(page)) === 'bar', 'a second Right keeps seeking on the bar');
+      await wait(1500);
+      expect(await onPlay(), 'about 1.2 s after the last step focus is back on Play/Pause (' + (await focusLabel(page)) + ')');
+      await shot('player-09-quick-seek-settled');
+      await press('back');
+      await page.keyboard.press('ArrowLeft');
+      await wait(150);
+      expect((await focusLabel(page)) === 'bar' && (await engineState(page)).position < t1 + 10000, 'Left while hidden is the quick seek back');
+      await wait(1500);
+      await press('back');
+      await wait(300);
+
       // Audio & subtitles: open from its button, close with Back: focus is on Play/Pause, not on Audio
-      await press('left');
+      await press('down'); // controls up on Play/Pause
       await press('left', 2);
       expect((await focusLabel(page)) === 'Audio & subtitles', 'focus on Audio & subtitles');
       await press('ok');
@@ -237,7 +259,7 @@ export default [
       await press('ok');
       await wait(300);
       expect(!(await page.evaluate(() => !!document.querySelector('.pl-upnext'))), 'Up next is closed');
-      await press('left');
+      await press('down');
       expect((await controlsUp(page)) && (await onPlay()), 'afterwards the controls come up on Play/Pause (' + (await focusLabel(page)) + ')');
     },
   },

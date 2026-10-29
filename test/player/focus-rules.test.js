@@ -36,9 +36,14 @@ test('Left and Right walk the buttons without wrapping; Next episode is there on
   assert.equal(stepFocus(order, 'audio', 'down'), 'audio');
 });
 
-test('while the controls are hidden: OK pauses or resumes and shows them on Play/Pause; the arrows only show them', () => {
-  assert.deepEqual(hiddenKey('ok'), { show: true, toggle: true });
-  for (const a of ['left', 'right', 'up', 'down']) assert.deepEqual(hiddenKey(a), { show: true, toggle: false }, a);
+test('while the controls are hidden: OK pauses or resumes and shows them on Play/Pause; Up and Down only show them; Left and Right are the quick seek', () => {
+  assert.deepEqual(hiddenKey('ok'), { show: true, toggle: true, focus: 'play' });
+  for (const a of ['up', 'down']) assert.deepEqual(hiddenKey(a), { show: true, toggle: false, focus: 'play' }, a);
+  assert.deepEqual(hiddenKey('left'), { show: true, toggle: false, focus: 'bar', seek: -1 }, 'Left: the bar is focused and the first 10 s step back is taken now');
+  assert.deepEqual(hiddenKey('right'), { show: true, toggle: false, focus: 'bar', seek: 1 });
+  assert.equal(focusOnShow('bar'), 'bar', 'the controls honour the bar for a quick seek');
+  assert.equal(focusOnShow('audio'), 'play', 'and put anything else on Play/Pause');
+  assert.equal(focusAfterSeek(hiddenKey('right').focus), 'play', 'and 1.2 s after the last step focus is back on Play/Pause');
   assert.equal(hiddenKey('back'), null, 'Back is the screen\'s (it leaves the player)');
   assert.equal(hiddenKey('red'), null);
 });

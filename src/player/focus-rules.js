@@ -19,9 +19,12 @@ export function buttonOrder(hasNext) {
   return ['audio', 'stream', 'play'].concat(hasNext ? ['next'] : [], ['info']);
 }
 
-/** Focus when the controls come up from hidden, whatever brought them: always Play/Pause. */
-export function focusOnShow() {
-  return HOME;
+/**
+ * Focus when the controls come up from hidden: Play/Pause, except for a quick seek (Left/Right while hidden), which asks for
+ * the bar [wanted = 'bar'] so the next press keeps seeking; SEEK_SETTLE after its last step focus goes back to Play/Pause.
+ */
+export function focusOnShow(wanted) {
+  return wanted === 'bar' ? 'bar' : HOME;
 }
 
 /** Focus when something that sat over the controls has closed (the Audio & subtitles panel, the Info card): Play/Pause. */
@@ -50,12 +53,16 @@ export function stepFocus(order, current, action) {
 }
 
 /**
- * What a key does while the controls are hidden (and no card is open): { show, toggle } or null when the screen has no use for it.
- * OK pauses or resumes AND brings the controls up on Play/Pause (Alder: showControls(playPause)); the arrows only bring them up.
+ * What a key does while the controls are hidden (and no card is open): { show, toggle, focus, seek } or null when the screen has
+ * no use for it. OK pauses or resumes AND brings the controls up on Play/Pause (Alder: showControls(playPause)); Up and Down only
+ * bring them up (on Play/Pause); Left and Right are the quick seek (Alder, Netflix): the controls come up with the bar focused
+ * AND the first step (seek: -1 / +1 of 10 s) is taken at once.
  */
 export function hiddenKey(action) {
-  if (action === 'ok') return { show: true, toggle: true };
-  if (action === 'left' || action === 'right' || action === 'up' || action === 'down') return { show: true, toggle: false };
+  if (action === 'ok') return { show: true, toggle: true, focus: HOME };
+  if (action === 'left') return { show: true, toggle: false, focus: 'bar', seek: -1 };
+  if (action === 'right') return { show: true, toggle: false, focus: 'bar', seek: 1 };
+  if (action === 'up' || action === 'down') return { show: true, toggle: false, focus: HOME };
   return null;
 }
 

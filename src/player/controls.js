@@ -148,8 +148,7 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
   }
 
   /**
-   * Brings the controls up and restarts the time to hide. Coming up from hidden, focus is always on Play/Pause (focusOnShow),
-   * whatever [id] says; when they are already up, [id] moves focus there (null leaves it where it is).
+   * Brings the controls up and restarts the time to hide. Coming up from hidden, focus is on Play/Pause (focusOnShow), or the bar for a quick seek; when they are already up, [id] moves focus there (null leaves it where it is).
    */
   function show(id) {
     if (destroyed) return;
@@ -162,7 +161,7 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
       engine.setControlsShown(true);
       if (subtitleRaise) subtitleRaise(true);
       refresh();
-      setFocus(focusOnShow());
+      setFocus(focusOnShow(id));
     } else if (id) setFocus(id);
     startHide();
   }
@@ -379,6 +378,8 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
     engine.on('scrub', () => {
       if (isShown || optionsOpen) refresh();
       // a seek is over a moment after its last step: focus leaves the bar for Play/Pause
+      // (the engine's own commit of the seek, a moment after the last step, emits this too: it is not another step)
+      if (!engine.snapshot().scrubbing) return;
       cancel(seekTimer);
       seekTimer = later(() => { seekTimer = null; if (isShown && focusAfterSeek(focus) !== focus) setFocus(focusAfterSeek(focus)); }, SEEK_SETTLE);
     }),
@@ -418,7 +419,8 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
       const plan = hiddenKey(a);
       if (!plan) return false;
       if (plan.toggle) engine.togglePlay(); // the dispatcher gives one press per OK: no wake-key bookkeeping
-      if (plan.show) show(focusOnShow());
+      if (plan.show) show(plan.focus);
+      if (plan.seek) engine.scrub(plan.seek * scrubStep(0)); // the quick seek: the first step is taken now, the bar is where the next ones go
       return true;
     }
 
