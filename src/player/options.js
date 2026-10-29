@@ -8,7 +8,7 @@
  * createOptions({ host, engine }) -> { open(), close(), isOpen(), key(evt) -> handled, onClose, update(state, left) }
  */
 import { h } from '../lib/dom.js';
-import { iconSvg } from '../ui/icons.js';
+import { iconEl } from '../ui/icons.js';
 import { createBar, formatClock } from './bar.js';
 import { audioRows, subtitleRows, TIMING_STEPS, timingLabel } from './tracks.js';
 import { PICTURE, pictureHints } from './picture.js';
@@ -37,7 +37,7 @@ export function createOptions({ host, engine }) {
       const dim = item.playable === false;
       const name = h('span', { class: 'pl-opt-name' }, item.name);
       const tag = item.tag ? h('span', { class: 'pl-opt-tag t-small t-3' }, item.tag) : null;
-      const check = h('span', { class: 'icon pl-opt-check', html: iconSvg('check') });
+      const check = iconEl('check', 32, { className: 'pl-opt-check' });
       check.style.visibility = i === chosenIndex ? 'visible' : 'hidden';
       const el = h('div', { class: 'pl-row' + (i === chosenIndex ? ' chosen' : '') + (dim ? ' dim' : ''), role: 'menuitem' }, name, tag || h('span', { class: 'pl-opt-tag' }), check);
       into.appendChild(el);

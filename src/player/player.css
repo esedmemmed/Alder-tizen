@@ -22,6 +22,15 @@ html:not(.av-live) .av-object { visibility: hidden; }
 
 /* ---- the controls ---- */
 .pl-pausedshade { background: rgba(0, 0, 0, 0.3); }
+/* The centre glyph: a pause (while paused) or play (a flash on resume) symbol in a dark disc. Opacity and transform only:
+   in 120 ms on pause; after the play flash (~600 ms, timed in controls.js) it fades out over 250 ms while growing a little. */
+.pl-centre {
+  position: absolute; left: 50%; top: 50%; width: 176px; height: 176px; margin: -88px 0 0 -88px; border-radius: 88px;
+  background: rgba(14, 12, 10, 0.62); display: flex; align-items: center; justify-content: center;
+  opacity: 0; transform: scale(0.88); transition: opacity 120ms linear, transform 120ms ease-out; pointer-events: none;
+}
+.pl-centre.on { opacity: 1; transform: scale(1); }
+.pl-centre.fade { opacity: 0; transform: scale(1.12); transition: opacity 250ms linear, transform 250ms ease-out; }
 .pl-controls { opacity: 0; transition: opacity 150ms linear; }
 .pl-controls.on { opacity: 1; }
 .pl-shade-top { position: absolute; left: 0; top: 0; width: 1920px; height: 240px; background: linear-gradient(to bottom, rgba(14, 12, 10, 0.6), rgba(14, 12, 10, 0)); }
@@ -136,3 +145,13 @@ html:not(.av-live) .av-object { visibility: hidden; }
 .dg-line.debug { color: var(--text-3); }
 .dg-line.warn, .dg-line.error { color: var(--tungsten); font-weight: 600; }
 .dg-status { position: absolute; left: 96px; bottom: 36px; font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-2); }
+
+/* the Icons block of Diagnostics: every icon, light on dark and dark on light, three ways of drawing it */
+.dg-icons { margin-top: 6px; }
+.dg-strips { display: flex; margin: 4px 0 14px 0; }
+.dg-strip { display: flex; align-items: center; width: 844px; height: 60px; padding: 0 8px; border-radius: 10px; }
+.dg-strip + .dg-strip { margin-left: 40px; }
+.dg-strip.dark { background: #0e0c0a; border: 2px solid rgba(243, 238, 230, 0.3); color: #f3eee6; }
+.dg-strip.light { background: #f2e8d8; color: #15110e; }
+.dg-ic { flex: none; width: 46px; height: 40px; display: flex; align-items: center; justify-content: center; }
+.dg-ic .icon { width: 40px; height: 40px; }

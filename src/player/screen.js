@@ -13,6 +13,7 @@ import { createEngine } from './engine.js';
 import { createAvplay, attachVideoObject } from './avplay.js';
 import { createControls, wallClockText } from './controls.js';
 import { createOptions } from './options.js';
+import { mediaPlan, focusOnShow, focusAfterClose } from './focus-rules.js';
 import { createSubtitleView } from './subtitles.js';
 import { createTvLanguage } from './language.js';
 import { diag } from './diag.js';
@@ -51,15 +52,23 @@ export function createPlayerScreen(params = {}) {
     ctx.router.pop();
   }
 
+  /**
+   * The media keys (focus-rules.js mediaPlan). Play/Pause acts at once and keeps the controls down: the centre glyph and the
+   * dimmed picture say what happened. Fast-forward and rewind bring the controls up on Play/Pause and step 10 s.
+   */
   function mediaKey(evt) {
     if (evt.type !== 'press') return false;
     const a = evt.action;
-    if (a === 'playpause') engine.togglePlay();
-    else if (a === 'play') engine.play();
-    else if (a === 'pause') engine.pause();
-    else if (a === 'stop') engine.exit();
-    else if ((a === 'ff' || a === 'rw') && !options.isOpen() && !controls.cardOpen()) { controls.show('bar'); engine.scrub(a === 'ff' ? PLAYER.SKIP : -PLAYER.SKIP); }
-    else return a === 'ff' || a === 'rw';
+    if (a === 'stop') { engine.exit(); return true; }
+    const plan = mediaPlan(a);
+    if (!plan) return false;
+    if (plan.seek) {
+      if (options.isOpen() || controls.cardOpen()) return true;
+      controls.show(focusOnShow());
+      engine.scrub(plan.seek * PLAYER.SKIP);
+    } else if (plan.toggle) controls.quiet(() => engine.togglePlay());
+    else if (plan.play) controls.quiet(() => engine.play());
+    else if (plan.pause) controls.quiet(() => engine.pause());
     return true;
   }
 
@@ -94,7 +103,7 @@ export function createPlayerScreen(params = {}) {
       controls.setSubtitleRaise((up) => subtitles.raise(up));
       controls.onOpenOptions = () => { options.open(); controls.setOptionsOpen(true); };
       controls.onProgress = (s, left) => options.update(s, left);
-      options.onClose = () => { controls.setOptionsOpen(false); controls.show('audio'); };
+      options.onClose = () => { controls.setOptionsOpen(false); controls.show(focusAfterClose()); };
       // Up next takes the screen: the options panel goes (Alder's showUpNext sets it GONE)
       engine.on('upNext', () => { if (options.isOpen()) { options.close(true); controls.setOptionsOpen(false); } });
       engine.on('navigate', navigate);

@@ -3,22 +3,25 @@
  * Skip intro pill and the cards (Up next, "Keeps buffering", "Source failed", and Info: the shape of the picture and the way
  * to the title page, which the Info button used to open at once). A port of buildControls(), showControls(),
  * hideControls(), updateProgress(), buildLoading(), showUpNext(), showStall() and showSourceError() in PlayerActivity.kt.
+ * Where focus goes (always Play/Pause when the controls come up, after a panel or card closes and after a seek) is
+ * decided by focus-rules.js; the centre glyph (a pause or play symbol in a dark disc, like Netflix) is drawn here.
  *
  * Focus here is one of our own, not the shell's focus engine: the player takes every key (the screen returns true for
  * all of them), so a class marks the focused control. That is also what Alder's dispatchKeyEvent does: it decides
  * itself which key goes where.
  *
  * createControls({ host, engine, timers, clockText, toast }) -> {
- *   el, shown(), show(focus), hide(force), key(evt) -> handled, cardOpen(), onOpenOptions, setOptionsOpen(bool), destroy()
+ *   el, shown(), show(focus), hide(force), key(evt) -> handled, cardOpen(), quiet(fn), onOpenOptions, setOptionsOpen(bool), destroy()
  * }
  */
 import { h } from '../lib/dom.js';
-import { iconSvg } from '../ui/icons.js';
+import { iconEl, swapIcon, paintIcon, INK_LIGHT } from '../ui/icons.js';
 import { keyHint } from '../ui/chip.js';
 import { PLAYER } from '../core/playback.js';
 import { logoFor } from '../lib/images.js';
 import { createBar, formatClock, formatLeft } from './bar.js';
 import { PICTURE_NAMES, PICTURE } from './picture.js';
+import { buttonOrder, focusOnShow, focusAfterClose, focusAfterSeek, showsControlsAfterClose, stepFocus, hiddenKey, glyphFor, SEEK_SETTLE, GLYPH } from './focus-rules.js';
 
 const { HIDE, SKIP } = PLAYER;
 const REFRESH = 500; // ms between updates of the bar and the times (Alder's progressTask)
@@ -48,6 +51,10 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
   let repeatCount = 0;
   let destroyed = false;
   let lastLogo = null;
+  let quietPause = false; // a media-key pause: the picture dims and the glyph shows, the controls stay down
+  let seekTimer = null;
+  let glyphTimer = null;
+  let wasPlaying = null;
 
   // ---- the controls ----
   const topName = h('div', { class: 'pl-topname t-title on-art ellipsis' });
@@ -64,12 +71,23 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
   bar.el.classList.add('pl-mainbar');
 
   const buttons = {};
+  // The icon sits in a fixed-size .icon wrapper (40 px, the primary button's 50 px): an <svg> placed straight into the flex
+  // circle with no size of its own collapsed to nothing on the TV's Chromium M69 and left empty circles (0.1.0).
+  const BTN_ICON = 40;
+  const PRIMARY_ICON = 50;
   function button(id, label, icon, primary) {
     const words = h('div', { class: 'pl-btn-label t-small t-2 on-art' }, label);
-    const circle = h('div', { class: 'pl-btn' + (primary ? ' primary' : ''), role: 'button', 'aria-label': label, html: iconSvg(icon) });
+    const glyph = iconEl(icon, primary ? PRIMARY_ICON : BTN_ICON);
+    const circle = h('div', { class: 'pl-btn' + (primary ? ' primary' : ''), role: 'button', 'aria-label': label }, glyph);
     const cell = h('div', { class: 'pl-cell' + (primary ? ' primary' : '') }, circle, words);
-    buttons[id] = { id, cell, circle, words, label };
+    buttons[id] = { id, cell, circle, glyph, words, label };
     return cell;
+  }
+  /** The icon takes the colour the circle has in its state, as a value (a focused circle is warm-white with dark ink). */
+  function paint(id) {
+    const b = buttons[id];
+    const color = b && window.getComputedStyle(b.circle).color;
+    if (color) paintIcon(b.glyph, color);
   }
   const audioCell = button('audio', 'Audio & subtitles', 'subtitles', false);
   const streamCell = button('stream', 'Change stream', 'layers', false);
@@ -87,6 +105,9 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
   // ---- the layers over the picture ----
   const pausedShade = h('div', { class: 'pl-pausedshade' });
   pausedShade.style.display = 'none';
+  // The centre glyph: a pause symbol in a dark disc fades in when the film is paused; a play symbol flashes when it resumes.
+  const centreIcon = iconEl('pause', 96, { color: INK_LIGHT });
+  const centre = h('div', { class: 'pl-centre' }, centreIcon);
   const status = h('div', { class: 'pl-status t-body on-art' });
   const loadingBar = createBar(1608);
   const loadingStart = h('div', { class: 'pl-loading-start t-small t-2 on-art' });
@@ -99,13 +120,15 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
   skipPill.style.display = 'none';
   const cardHost = h('div', { class: 'pl-cardhost' });
 
-  const el = h('div', { class: 'pl-layers' }, pausedShade, controls, loading, cardHost, skipPill);
+  const el = h('div', { class: 'pl-layers' }, pausedShade, centre, controls, loading, cardHost, skipPill);
   host.appendChild(el);
+  Object.keys(buttons).forEach(paint); // every icon starts with its colour resolved, not just the two a focus move touches
 
   // ---- focus ----
-  function order() { return ['audio', 'stream', 'play'].concat(engine.titleInfo().hasNext ? ['next'] : [], ['info']); }
+  function order() { return buttonOrder(engine.titleInfo().hasNext); }
 
   function setFocus(id) {
+    const before = focus;
     focus = id;
     bar.focus(id === 'bar');
     Object.keys(buttons).forEach((k) => {
@@ -113,6 +136,8 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
       buttons[k].circle.classList.toggle('focus', on);
       buttons[k].words.classList.toggle('on', on);
     });
+    // only the two circles whose state changed are painted again (a style read each)
+    if (before !== id) { if (buttons[before]) paint(before); if (buttons[id]) paint(id); } else if (buttons[id]) paint(id);
   }
 
   // ---- show and hide ----
@@ -122,7 +147,10 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
     if (playing && isShown) hideTimer = later(() => hide(false), HIDE);
   }
 
-  /** Brings the controls up with [id] focused (null: leaves focus where it is) and restarts the time to hide. */
+  /**
+   * Brings the controls up and restarts the time to hide. Coming up from hidden, focus is always on Play/Pause (focusOnShow),
+   * whatever [id] says; when they are already up, [id] moves focus there (null leaves it where it is).
+   */
   function show(id) {
     if (destroyed) return;
     cancel(hideTimer);
@@ -134,7 +162,7 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
       engine.setControlsShown(true);
       if (subtitleRaise) subtitleRaise(true);
       refresh();
-      setFocus(id || 'play');
+      setFocus(focusOnShow());
     } else if (id) setFocus(id);
     startHide();
   }
@@ -144,6 +172,7 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
     if (!isShown) return;
     isShown = false;
     cancel(hideTimer);
+    cancel(seekTimer);
     controls.classList.remove('on');
     engine.setControlsShown(false);
     if (subtitleRaise) subtitleRaise(false);
@@ -206,14 +235,31 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
   // ---- play / pause ----
   function setPlaying(on) {
     playing = on;
-    buttons.play.circle.innerHTML = iconSvg(on ? 'pause' : 'play');
+    swapIcon(buttons.play.glyph, on ? 'pause' : 'play', PRIMARY_ICON);
+    paint('play');
     buttons.play.label = on ? 'Pause' : 'Play';
     buttons.play.circle.setAttribute('aria-label', buttons.play.label);
     buttons.play.words.textContent = on ? 'Pause' : 'Play';
     pausedShade.style.display = on ? 'none' : '';
     pauseInfo.style.display = on ? 'none' : '';
-    if (on) { if (isShown) startHide(); } else if (!optionsOpen && !card) show('play');
+    glyph(glyphFor(wasPlaying, on));
+    wasPlaying = on;
+    if (on) { if (isShown) startHide(); } else if (!optionsOpen && !card && !quietPause) show('play');
   }
+
+  // ---- the centre glyph (transform and opacity only) ----
+  /** 'pause': the pause symbol fades in (120 ms) and stays while paused. 'play': the play symbol shows ~600 ms, then fades out. */
+  function glyph(kind) {
+    if (!kind) return;
+    cancel(glyphTimer);
+    glyphTimer = null;
+    swapIcon(centreIcon, kind, 96, INK_LIGHT);
+    centre.classList.remove('fade');
+    centre.classList.add('on');
+    if (kind === 'play') glyphTimer = later(() => { centre.classList.remove('on'); centre.classList.add('fade'); glyphTimer = null; }, GLYPH.FLASH_MS);
+  }
+  /** Nothing over the picture's centre while the options panel or a card is up. */
+  function syncCentre() { centre.style.visibility = optionsOpen || card ? 'hidden' : ''; }
 
   // ---- the loading overlay ----
   function setLoading(visible, message) {
@@ -230,10 +276,14 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
   }
 
   // ---- the cards ----
-  function closeCard() {
+  /** [reveal]: the person closed it (Back, Close): a card opened from the controls brings them back on Play/Pause. */
+  function closeCard(reveal) {
+    const kind = card && card.kind;
     card = null;
     while (cardHost.firstChild) cardHost.removeChild(cardHost.firstChild);
     if (skipWanted) skipPill.style.display = '';
+    syncCentre();
+    if (reveal && showsControlsAfterClose(kind) && !optionsOpen) show(focusAfterClose());
   }
 
   function cardFocus(i) {
@@ -247,11 +297,12 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
     cardHost.appendChild(node);
     skipPill.style.display = 'none';
     card = { kind, actions, at };
+    syncCentre();
     cardFocus(at);
   }
 
   function pillAction(label, icon, run) {
-    const node = h('div', { class: 'pl-pill', role: 'button' }, icon ? h('span', { class: 'icon', html: iconSvg(icon) }) : null, h('span', { class: 'label' }, label));
+    const node = h('div', { class: 'pl-pill', role: 'button' }, icon ? iconEl(icon, 32) : null, h('span', { class: 'label' }, label));
     return { el: node, run };
   }
   function chipAction(label, run) {
@@ -292,7 +343,7 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
     setLoading(false);
     const info = engine.titleInfo();
     const pic = engine.pictureInfo();
-    const close = pillAction('Close', null, () => closeCard());
+    const close = pillAction('Close', null, () => closeCard(true));
     const details = chipAction('Title page', () => engine.info());
     const shows = pic.showing === PICTURE.FILL ? 'Fill  ·  zoomed in, ' + (pic.crop ? pic.crop + '% of the picture is cut off' : 'nothing is cut off for this film')
       : pic.mode === PICTURE.FILL && pic.reason ? 'Fit  ·  Fill is not applied: ' + pic.reason
@@ -325,7 +376,12 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
     engine.on('loading', (d) => setLoading(d.visible, d.message)),
     engine.on('started', () => { setLoading(false); showTitle(); }),
     engine.on('meta', showTitle),
-    engine.on('scrub', () => { if (isShown || optionsOpen) refresh(); }),
+    engine.on('scrub', () => {
+      if (isShown || optionsOpen) refresh();
+      // a seek is over a moment after its last step: focus leaves the bar for Play/Pause
+      cancel(seekTimer);
+      seekTimer = later(() => { seekTimer = null; if (isShown && focusAfterSeek(focus) !== focus) setFocus(focusAfterSeek(focus)); }, SEEK_SETTLE);
+    }),
     engine.on('skip', (d) => setSkip(d.visible, d.label)),
     engine.on('upNext', (d) => showUpNext(d.video)),
     engine.on('upNextHide', () => { if (card && card.kind === 'upnext') closeCard(); }),
@@ -346,7 +402,7 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
 
     if (card) {
       if (a === 'back') {
-        if (!evt.repeat) { if (card.kind === 'upnext') engine.dismissUpNext(); else if (card.kind === 'info') closeCard(); else engine.dismissStall(); }
+        if (!evt.repeat) { if (card.kind === 'upnext') engine.dismissUpNext(); else if (card.kind === 'info') closeCard(true); else engine.dismissStall(); }
         return true;
       }
       if (a === 'left') cardFocus(card.at - 1);
@@ -359,10 +415,11 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
     if (!isShown && a === 'ok' && engine.skipSegment()) return true;
 
     if (!isShown) {
-      if (a === 'left' || a === 'right') { show('bar'); return true; }
-      if (a === 'ok') { engine.togglePlay(); show('play'); return true; } // the dispatcher gives one press per OK: no wake-key bookkeeping
-      if (a === 'up' || a === 'down') { show('play'); return true; }
-      return false;
+      const plan = hiddenKey(a);
+      if (!plan) return false;
+      if (plan.toggle) engine.togglePlay(); // the dispatcher gives one press per OK: no wake-key bookkeeping
+      if (plan.show) show(focusOnShow());
+      return true;
     }
 
     if (a === 'back') { if (!evt.repeat) hide(true); return true; }
@@ -370,16 +427,12 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
     if (focus === 'bar') {
       if (a === 'left') engine.scrub(-scrubStep(repeatCount));
       else if (a === 'right') engine.scrub(scrubStep(repeatCount));
-      else if (a === 'down') setFocus('play');
+      else if (a === 'down') setFocus(stepFocus(order(), 'bar', 'down'));
       else if (a === 'ok') engine.togglePlay();
       return true;
     }
-    const ids = order();
-    const i = ids.indexOf(focus);
-    if (a === 'left') setFocus(ids[Math.max(0, i - 1)]);
-    else if (a === 'right') setFocus(ids[Math.min(ids.length - 1, i + 1)]);
-    else if (a === 'up') setFocus('bar');
-    else if (a === 'ok') activate(focus);
+    if (a === 'ok') activate(focus);
+    else setFocus(stepFocus(order(), focus, a));
     return true;
   }
 
@@ -396,11 +449,14 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
     shown: () => isShown,
     show, hide, key,
     cardOpen: () => !!card,
+    /** Runs [fn] (a media key's play or pause) with the controls kept down: the glyph and the dimmed picture say what happened. */
+    quiet(fn) { quietPause = true; try { fn(); } finally { quietPause = false; } },
     onOpenOptions: null,
     onProgress: null,
     /** The options panel is up: the controls give way to it (Alder's openOptions hides them). */
     setOptionsOpen(on) {
       optionsOpen = !!on;
+      syncCentre();
       if (on) { hide(true); controls.style.display = 'none'; refresh(); }
     },
     setSubtitleRaise(fn) { subtitleRaise = fn; },
@@ -409,7 +465,7 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
     focusId: () => focus,
     destroy() {
       destroyed = true;
-      cancel(hideTimer); cancel(refreshTimer);
+      cancel(hideTimer); cancel(refreshTimer); cancel(seekTimer); cancel(glyphTimer);
       off.forEach((f) => f());
       if (el.parentNode) el.parentNode.removeChild(el);
     },
