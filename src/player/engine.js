@@ -861,7 +861,9 @@ export function createEngine(params, deps) {
       }
     };
     Promise.resolve().then(() => stremio.library(authKey, [metaId])).then(
-      (list) => settle((list && list[0]) || library.newItem(metaId, type, params.name || '', params.poster)),
+      // the answer for this title: asked by id, but whatever comes back is only used if it is this title's own item
+      // (history written onto another title's item would be worse than none)
+      (list) => settle((list && list.find((it) => it && it._id === metaId)) || library.newItem(metaId, type, params.name || '', params.poster)),
       (e) => { warn('library unavailable: ' + (e && e.message ? e.message : e)); settle(null); },
     );
   }

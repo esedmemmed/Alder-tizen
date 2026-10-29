@@ -62,7 +62,7 @@ export function makeEngine(opts = {}) {
     savedLibrary: () => (opts.saved ? [opts.saved] : null),
     library() {
       if (opts.libraryFails) return Promise.reject(new Error('offline'));
-      const answer = item ? [item] : [];
+      const answer = opts.libraryList || (item ? [item] : []);
       return opts.libraryDelay ? new Promise((resolve) => clock.setTimeout(() => resolve(answer), opts.libraryDelay)) : Promise.resolve(answer);
     },
     async saveLibrary(key, items) { puts.push({ key, at: clock.now(), items: JSON.parse(JSON.stringify(items)) }); },

@@ -500,3 +500,16 @@ test('play and pause', async () => {
   assert.equal(t.av.getState(), 'PLAYING');
   assert.equal(t.events.playing[t.events.playing.length - 1].playing, true);
 });
+
+test('history is written onto this title\'s own library item, never onto another one the answer happens to list first', async () => {
+  // Stremio is asked for one id and answers with that item; a server (or a fixture) that lists others too must not make the
+  // first of them the item that gets the progress.
+  const other = libraryItem({ id: 'tt0000001', type: 'movie' });
+  const mine = libraryItem({ state: { timeOffset: 0, duration: 0, video_id: null } });
+  const t = makeEngine({ sources: [stream('Film')], item: mine, libraryList: [other, mine] });
+  await t.start();
+  await t.advance(70000);
+  assert.ok(mine.state.timeOffset > 0, 'this title\'s item got the progress');
+  assert.equal(other.state.timeOffset, 0, 'the other one is untouched');
+  assert.ok(t.puts.length >= 1 && t.puts.every((p) => p.items.every((i) => i._id === 'tt15239678')), 'and only it was sent to Stremio');
+});
