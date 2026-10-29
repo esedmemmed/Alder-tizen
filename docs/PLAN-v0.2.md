@@ -87,3 +87,8 @@ press on a nav tab to the new page's first row painted, and to the hero art), th
 Target: tab switch to first row < 150 ms at 4× throttle from kept answers. Report before/after numbers.
 Paths: `src/screens/home.js`, `src/app/home-model.js`, `src/ui/row.js`, `src/ui/styles/home.css`, `test/app/`,
 `dev/scenarios/v02-pages.mjs`.
+
+### D addendum (2026-10-29, owner's TV photos)
+- Icons render on Home and the title page but not in the player: the player inserts the `<svg>` straight into the flex
+  `.pl-btn` with no sized `.icon` wrapper, so on M69 it collapses to 0×0. Fix by always wrapping + a regression check.
+- Back at the bottom of the stack must ask "Exit Alder?" (Stay focused by default / Exit) instead of closing at once.
