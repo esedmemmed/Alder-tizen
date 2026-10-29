@@ -9,7 +9,7 @@
     "build": "node scripts/build.mjs",
     "build:dev": "node scripts/build.mjs --dev",
     "dev": "node dev/fixture-server.mjs",
-    "test": "node --test test/",
+    "test": "node --test \"test/**/*.test.js\"",
     "compat": "node scripts/compat-check.mjs",
     "shots": "node dev/screenshot.mjs"
   },
