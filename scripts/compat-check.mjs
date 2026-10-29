@@ -149,6 +149,9 @@ export function scanText(file, text, kind, polyfilled) {
   const rules = kind === 'js' ? JS_RULES : kind === 'css' ? CSS_RULES : [];
   for (const rule of rules) {
     if (rule.files && rule.files.indexOf(file) >= 0) continue;
+    // A rule with a per-file exemption (stableSort's own sort) cannot be judged in the bundle, which is one minified file with
+    // no comments or paths: the source scan above already checks every src file against it.
+    if (rule.files && file.indexOf('dist/') === 0) continue;
     if (kind === 'js' && rule.needs && rule.needs.every((n) => polyfilled.has(n))) continue;
     const re = new RegExp(rule.re.source, rule.re.flags.replace('g', '') + 'g');
     let m;
