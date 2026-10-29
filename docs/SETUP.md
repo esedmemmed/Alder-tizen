@@ -50,8 +50,8 @@ number. You can also find it on the phone: **Settings, Connections, Wi-Fi**, tap
 
 ### 5. Get `Alder.wgt` onto the phone
 
-Download `Alder.wgt` to the phone: from the Releases page of the Alder for Tizen project on GitHub, or from wherever you
-were given it. It is a small file (about 450 KB). A normal browser download goes to the **Downloads** folder. Do not rename it
+Download `Alder.wgt` to the phone from <https://github.com/esedmemmed/Alder-tizen/releases/latest> (or from wherever you
+were given it). It is a small file (about 450 KB). A normal browser download goes to the **Downloads** folder. Do not rename it
 and do not unzip it.
 
 ### 6. Install it
