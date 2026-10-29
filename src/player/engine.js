@@ -25,7 +25,7 @@
  * deps: avplay (player/avplay.js), clock ({ now, setTimeout, clearTimeout }), stremio + authKey, library (core/library.js
  *   createLibrary), settings (core/settings.js), memory (core/ranking.js createSourceMemory), device (core/device.js profile),
  *   http ({ get(url) -> Promise<string> }), log (lib/log.js logger), diag (player/diag.js), tvLanguage () => "en",
- *   audioLanguage () => "en" (default: settings.audioLanguage()), loadMeta () => Promise<Meta|null> (default: the account's
+ *   audioLanguage () => "en" (default: settings.audioLanguage()), loadMeta (type, metaId) => Promise<Meta|null> (default: the account's
  *   meta add-on), resolveUrl (stream) => url | Promise<url> (default: player/sources.js).
  *
  * ---- events ----
@@ -801,7 +801,7 @@ export function createEngine(params, deps) {
   // ---- starting ----
 
   async function loadMeta() {
-    if (deps.loadMeta) return deps.loadMeta();
+    if (deps.loadMeta) return deps.loadMeta(type, metaId);
     if (!stremio || !authKey) return null;
     const addon = (await stremio.addons(authKey)).find((a) => a.serves('meta', type, metaId));
     if (!addon) return null;
