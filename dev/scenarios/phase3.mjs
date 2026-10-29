@@ -129,7 +129,7 @@ export default [
       await wait(300);
       expect(!(await visible(page, '.pl-options')), 'Back closes the panel');
       expect(await visible(page, '.pl-controls.on'), 'and the controls are back');
-      expect((await page.evaluate(() => document.querySelector('.pl-btn.focus').getAttribute('aria-label'))) === 'Audio & subtitles', 'focus returns to the Audio & subtitles button');
+      expect(/^(Pause|Play)$/.test(await page.evaluate(() => document.querySelector('.pl-btn.focus').getAttribute('aria-label'))), 'focus returns to Play/Pause (v0.2: it used to return to the Audio & subtitles button)');
     },
   },
   {

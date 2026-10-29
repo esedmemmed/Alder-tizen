@@ -70,8 +70,12 @@ export default [{
     await press('back');
     expect(!(await page.evaluate(() => !!document.querySelector('.panel'))), 'Back closes the panel');
 
-    // Back from the content goes up to the page's name, and from there out of the app: a toast says so on a desktop
-    for (let i = 0; i < 6 && !(await page.evaluate(() => window.__mockExitRequested)); i++) await press('back', 1, 20);
+    // Back from the content goes up to the page's name, and from there asks "Exit Alder?" (v0.2): Exit leaves the app, and a toast
+    // says so on a desktop
+    for (let i = 0; i < 6 && !(await page.evaluate(() => !!document.querySelector('.panel'))); i++) await press('back', 1, 20);
+    expect(await page.evaluate(() => !!document.querySelector('.panel')) && !(await page.evaluate(() => window.__mockExitRequested)), 'Back on Home asks before leaving');
+    await press('down');
+    await press('ok'); // Exit
     const toast = await page.evaluate(() => { const t = document.querySelector('.toast'); return t ? t.textContent : null; });
     const exits = await page.evaluate(() => window.__mockExitRequested || 0);
     expect(exits === 1 && toast && /leave|exit/i.test(toast), 'Back on Home requests exit (exit calls ' + exits + ', toast "' + toast + '")');
