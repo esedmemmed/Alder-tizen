@@ -1,7 +1,7 @@
 // Failover, audio decisions, retries: PlayerActivity's next(), onPlayerError() and the Tizen Stage B audio rule.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makeEngine, stream } from './helpers.js';
+import { makeEngine, stream, libraryItem } from './helpers.js';
 import { isRetryable, isDecodeError } from '../../src/player/engine.js';
 
 const FIRST = 'Dune.Part.Two.2160p.WEB-DL.DDP5.1';
@@ -245,4 +245,69 @@ test('the source memory is written once a picture shows', async () => {
   await t.advance(14000);
   assert.equal(t.store.get('sources/file:tt15239678'), 'Dune.2160p.mkv');
   assert.equal(t.store.get('sources/binge:tt15239678'), 'grp|2160p');
+});
+
+// ---- the picture signal: time advancing after play(), not buffering complete ----
+
+test('buffering completes but the time never advances: no picture, so the next source after START_WAIT, nothing saved', async () => {
+  const t = makeEngine({ sources: [stream('Undecodable', { start: 'never' }), stream('Good')], item: libraryItem({ state: { timeOffset: 0, duration: 0, video_id: null } }) });
+  await t.start();
+  await t.advance(2000);
+  t.av.__mock.emit('onbufferingcomplete'); // the decoder refused the video, but AVPlay says it is buffered
+  await t.advance(3000);
+  assert.equal(t.events.started.length, 0, 'not a picture');
+  assert.equal(t.opens().length, 1, 'still on the first source');
+  await t.advance(8000); // START_WAIT (12 s) from the start
+  assert.equal(t.opens().length, 2, 'START_WAIT failover still ran');
+  assert.ok(/Good/.test(t.opens()[1].args[0]));
+  assert.equal(t.puts.length, 0);
+  assert.equal(t.item.state.timeOffset, 0, 'nothing saved for the broken source');
+  await t.advance(3000);
+  assert.equal(t.events.started.length, 1, 'the second source shows a picture once its time advances');
+});
+
+test('the loading overlay goes at buffering complete, though the picture has not been confirmed', async () => {
+  const t = makeEngine({ sources: [stream('Undecodable', { start: 'never' })], params: { picked: true } });
+  await t.start();
+  await t.advance(1000);
+  assert.equal(t.events.loading[t.events.loading.length - 1].visible, true);
+  t.av.__mock.emit('onbufferingcomplete');
+  await t.advance(0);
+  assert.equal(t.events.loading[t.events.loading.length - 1].visible, false);
+  assert.equal(t.events.started.length, 0);
+});
+
+test('time advancing after play() is the picture: started, remembered, saved', async () => {
+  const t = makeEngine({ sources: [stream('Good')], item: libraryItem({ state: { timeOffset: 0, duration: 0, video_id: null } }) });
+  await t.start();
+  assert.equal(t.events.started.length, 0, 'play() was called but no time yet');
+  await t.advance(1200);
+  assert.equal(t.events.started.length, 1);
+  await t.advance(10000);
+  assert.ok(t.item.state.timeOffset > 0, 'progress is saved once started');
+});
+
+test('two consecutive increasing time reports count as a picture even from a resume point near the end of a short window', async () => {
+  const t = makeEngine({ sources: [stream('Good', { duration: 3000, start: 'slow:8000' })], params: { resumeAt: 1000000 } });
+  await t.start();
+  await t.advance(1500); // prepared, seeked, play() called; the mock's own picture is 8 s away
+  const mock = t.av.__mock;
+  assert.equal(t.callsOf('play').length, 1, 'play() was called');
+  const before = t.events.started.length;
+  mock.emit('oncurrentplaytime', 1000000); // first report: a baseline only (not 500 ms past the start yet)
+  await t.advance(0);
+  assert.equal(t.events.started.length, before);
+  await t.advance(0);
+  assert.equal(t.events.started.length, before);
+  mock.emit('oncurrentplaytime', 1000100); // second, increasing
+  await t.advance(0);
+  assert.equal(t.events.started.length, 1);
+});
+
+test('time reports before play() (a seek landing) are not a picture', async () => {
+  const t = makeEngine({ sources: [stream('Slow', { prepare: 'slow:3000' })], params: { resumeAt: 50000 } });
+  t.engine.start();
+  await t.advance(500);
+  assert.equal(t.callsOf('play').length, 0);
+  assert.equal(t.events.started.length, 0);
 });

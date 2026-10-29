@@ -70,3 +70,16 @@ test('a track list that is not a list (Tizen 5.5 "notSet") is shown as it came',
   const report = buildReport({ log: createLogger(), diag: diag.snapshot() });
   assert.match(report.find((s) => s.title.startsWith('AVPLAY')).lines[0].text, /"notSet"/);
 });
+
+import { makeEngine, stream, severanceMeta } from './helpers.js';
+
+test('the top-left name is the title\'s name, else the meta\'s, never a bare IMDb id', async () => {
+  const a = makeEngine({ sources: [stream('X')], params: { name: 'tt11280740' }, meta: severanceMeta() });
+  await a.start(); await a.advance(100);
+  assert.equal(a.engine.titleInfo().name, 'Severance', 'an id in the params is skipped for the meta\'s name');
+  const b = makeEngine({ sources: [stream('X')], params: { name: 'tt11280740' } });
+  await b.start();
+  assert.equal(b.engine.titleInfo().name, '', 'with no real name: nothing');
+  const c = makeEngine({ sources: [stream('X')], params: { name: 'Dune: Part Two' } });
+  assert.equal(c.engine.titleInfo().name, 'Dune: Part Two');
+});
