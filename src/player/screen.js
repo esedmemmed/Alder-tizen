@@ -4,10 +4,10 @@
  * app is hidden, and hands the engine's "navigate" to whoever opened the player.
  *
  *   router.push('player', params)       params: see engine.js (type, metaId, videoId, name, sources, resumeAt, ...), plus
- *                                       onNavigate(nav, context): where to go when the player is done (Phase 4's
- *                                       sources page and Details). Without it the player just closes.
+ *                                       onNavigate(nav, context): where to go when the player is done (the sources
+ *                                       page, the next episode, Details; src/app/navigation.js). Without it the player just closes.
  *   context.player                      the app's services for the engine: { library, settings, memory, device, stremio,
- *                                       authKey, http, loadMeta, resolveUrl, tvLanguage, onNavigate }. Phase 4 fills it in.
+ *                                       authKey, http, loadMeta, resolveUrl, tvLanguage, onNavigate }. src/main.js fills it in from the session.
  */
 import { createEngine } from './engine.js';
 import { createAvplay, attachVideoObject } from './avplay.js';
@@ -47,8 +47,7 @@ export function createPlayerScreen(params = {}) {
     if (closed) return;
     const handler = params.onNavigate || (ctx.player && ctx.player.onNavigate);
     if (handler) { handler(nav, ctx); return; }
-    // Nobody to go to (the demo): leave, and say what would have happened
-    if (nav.kind !== 'exit') ctx.toast(nav.kind === 'sources' ? (nav.message || 'The sources page arrives in Phase 4') : nav.kind === 'next' ? 'Next episode arrives in Phase 4' : 'Details arrive in Phase 4');
+    // Nobody to go to (a bare player screen in a test): just leave
     ctx.router.pop();
   }
 

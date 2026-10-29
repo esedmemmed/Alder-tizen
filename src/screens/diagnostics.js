@@ -4,7 +4,7 @@
  * (host and file name only: the URL can carry a debrid token), AVPlay's raw track list as it came, and every audio
  * decision with its reason. Large monospace text, scrolled with the D-pad, readable from the sofa.
  *
- *   openDiagnostics(context)       Phase 4's Settings calls this ("Diagnostics" row); the demo reaches it for now
+ *   openDiagnostics(context)       Settings > About calls this (the "Diagnostics" row, or hold OK on the version)
  *   diagnosticsScreens             { diagnostics } for the router's screen table
  *   buildReport(sources)           the report as sections of lines (pure, tested)
  */
