@@ -61,6 +61,7 @@ const { TICK, PUSH_EVERY, RESUME_SLACK, SKIP_SHOWN, START_WAIT, RETRIES, RETRY_W
 export const CHECK_EVERY = 500; // the Skip intro / Up next check (Alder's skipTask)
 const SEEK_GRACE = 2000; // a buffering this soon after a seek is the seek, not a stall
 const SEEK_WAIT = 2500; // how long the resume seek may take before play() goes ahead without waiting for it
+const PICTURE_MS = 500; // playback time must advance this far past the start (or on two reports in a row) to count as a picture
 const SUBTITLE_EVERY = 250; // how often an add-on subtitle is matched to the playing time
 
 /**
@@ -129,7 +130,8 @@ export function createEngine(params, deps) {
 
   // ---- state AVPlay needs and ExoPlayer kept for us ----
   let gen = 0; // each open of a source: what arrives from an earlier one is ignored
-  let playRequested = false; // play() was called: only then does a buffering event mean the picture
+  let playRequested = false; // play() was called: only then can time advancing mean the picture
+  let lastReport = null; // the previous oncurrentplaytime since play(), for "two reports in a row that increase"
   let playing = true; // playWhenReady
   let loading = { visible: false, message: '' };
   let bufferPercent = 0;
@@ -311,6 +313,7 @@ export function createEngine(params, deps) {
       if (mine !== gen || shut) return;
     }
     playRequested = true;
+    lastReport = null;
     playing = true;
     avplay.play();
     emit('playing', { playing: true });
@@ -343,12 +346,19 @@ export function createEngine(params, deps) {
       onBufferingComplete: live_(() => {
         if (!playRequested) return;
         reloadAt = null;
-        if (!started) onFirstPicture(); else hideLoading();
+        // Buffering done is not a picture: a decoder can refuse the video (unsupported profile, Dolby Vision P5, a broken
+        // file) while AVPlay buffers happily. Only the overlay goes; START_WAIT keeps running until the time moves.
+        hideLoading();
       }),
       onTime: live_((ms) => {
         lastTime = ms;
-        // belt and braces: time that runs is a picture, even if onbufferingcomplete came before play()
-        if (!started && playRequested && ms > startAt + 250) onFirstPicture();
+        // The picture signal: playback time advancing after play() (the decoder is rendering). Either 500 ms past where
+        // we started, or two consecutive reports that increase.
+        if (!started && playRequested) {
+          const before = lastReport;
+          lastReport = ms;
+          if (ms >= startAt + PICTURE_MS || (before !== null && ms > before)) onFirstPicture();
+        }
       }),
       onCompleted: live_(() => onEnded()),
       onError: live_((code) => onError(code)),
@@ -865,7 +875,9 @@ export function createEngine(params, deps) {
     const sub = meta
       ? (episode ? 'S' + episode.season + ' E' + episode.episode : meta.year || '')
       : label.split('  ·  ')[0];
-    return { name: params.name || '', title, subtitle: sub, logo: (meta && meta.logo) || params.logo || null, hasNext: nextVideo() !== null, next: nextVideo() };
+    // The top-left name: the title's name, else the meta's, never a bare id (an IMDb id is not a name)
+    const named = [params.name, meta && meta.name].find((n) => n && n.trim() && !/^tt\d+$/i.test(n.trim())) || '';
+    return { name: named, title, subtitle: sub, logo: (meta && meta.logo) || params.logo || null, hasNext: nextVideo() !== null, next: nextVideo() };
   }
 
   /** "1h 39m left", "Ends 1:06 AM" etc. for the paused screen. [wallMs]: the time now, for the end time. */

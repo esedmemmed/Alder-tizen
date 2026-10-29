@@ -188,11 +188,16 @@ export function createControls({ host, engine, timers = { setTimeout: (f, ms) =>
     topName.textContent = info.name;
     pauseTitle.textContent = info.title;
     nextCell.style.display = info.hasNext ? '' : 'none';
-    // Alder: the add-on's logo, else MetaHub's by IMDb id; the name in serif type until a logo has loaded
+    // Alder's chain: the title's logo picture, else its name in serif type, else nothing (never an id). The name shows until
+    // a logo has loaded, and comes back if the logo fails.
     const url = info.logo || logoFor(engine.params.metaId);
     if (url && url !== lastLogo && images) {
       lastLogo = url;
-      images.load(logo, url, { urgent: true, onDone: () => { logo.style.display = ''; topName.style.display = 'none'; }, onFail: () => { logo.style.display = 'none'; topName.style.display = ''; } });
+      images.load(logo, url, {
+        urgent: true,
+        onDone: () => { logo.style.display = ''; topName.style.display = 'none'; },
+        onFail: () => { logo.style.display = 'none'; topName.style.display = ''; },
+      });
     }
   }
 
