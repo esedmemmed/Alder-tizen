@@ -7,6 +7,10 @@
  *   openDiagnostics(context)       Settings > About calls this (the "Diagnostics" row, or hold OK on the version)
  *   diagnosticsScreens             { diagnostics } for the router's screen table
  *   buildReport(sources)           the report as sections of lines (pure, tested)
+ *
+ * The ICONS section draws every icon three ways, each light on dark and dark on light, and says how many were laid out
+ * with a size (and, for the <img> row, how many loaded): the 0.1.0 player showed empty circles on the TV, so one photo of
+ * this screen tells which way of drawing icons the TV can do (docs/DECISIONS.md "Icons on the TV").
  */
 import { h } from '../lib/dom.js';
 import { formatEntry } from '../lib/log.js';
@@ -15,6 +19,7 @@ import { ENV, VERSION } from '../lib/env.js';
 import { describeDevice, deviceProfile } from '../core/device.js';
 import { diag as appDiag } from '../player/diag.js';
 import { pictureLines } from '../player/picture.js';
+import { ICON_NAMES, iconEl, iconSvg, iconImg, INK_LIGHT, INK_DARK } from '../ui/icons.js';
 
 const LINE = 40; // px: one line of the report
 const FIVE = 5; // lines per Up / Down press (a held key repeats)
@@ -33,9 +38,11 @@ function clockOf(ms) {
  */
 export function buildReport({ log, diag, device = null, version = '', env = '', agent = '' }) {
   const out = [];
-  const section = (title, lines) => out.push({ title, lines: lines.map((l) => (typeof l === 'string' ? { text: l, level: '' } : l)) });
+  const section = (title, lines, extra) => out.push(Object.assign({ title, lines: lines.map((l) => (typeof l === 'string' ? { text: l, level: '' } : l)) }, extra));
 
   section('APP', ['Alder ' + version + ' (' + env + ')', agent]);
+  // right under APP so the first photo has it: the icons are drawn by createDiagnosticsScreen (they need a DOM)
+  section('ICONS', [ICON_NAMES.length + ' icons, light on dark (left) and dark on light (right); all three rows should show every icon'], { icons: true });
   section('DEVICE', device ? [describeDevice(device)].concat(device.notes || []) : ['No device profile yet']);
 
   const s = diag.stream;
@@ -65,6 +72,50 @@ export function buildReport({ log, diag, device = null, version = '', env = '', 
   return out;
 }
 
+/** Three ways to draw an icon, as makers of a cell's content: [name], [ink] -> element. */
+const ICON_WAYS = [
+  { id: 'svg', label: 'svg, built by script (explicit size and colour)', make: (name, ink) => iconEl(name, 40, { color: ink }) },
+  // the way most screens draw: markup in a .icon box that the stylesheet sizes, colour from the CSS colour
+  { id: 'html', label: 'svg, as markup in a sized box (the app)', make: (name) => { const box = h('span', { class: 'icon' }); box.innerHTML = iconSvg(name); return box; } },
+  { id: 'img', label: 'img, data: URI (colour baked in)', make: (name, ink) => iconImg(name, 40, ink) },
+];
+
+/**
+ * The Icons block: for each way, a dark strip and a light strip with every icon in it, and a status line counting what was
+ * laid out with a size (svg) or loaded (img). Returns { el, update() }; update() re-counts (the images load after mount).
+ */
+export function createIconsBlock() {
+  const el = h('div', { class: 'dg-icons' });
+  const ways = ICON_WAYS.map((way) => {
+    const status = h('div', { class: 'dg-line' }, way.label);
+    const items = [];
+    const strip = (cls, ink) => h('div', { class: 'dg-strip ' + cls }, ICON_NAMES.map((name) => {
+      const node = way.make(name, ink);
+      items.push(node);
+      return h('div', { class: 'dg-ic' }, node);
+    }));
+    el.appendChild(status);
+    el.appendChild(h('div', { class: 'dg-strips' }, strip('dark', INK_LIGHT), strip('light', INK_DARK)));
+    return { way, status, items };
+  });
+  function update() {
+    ways.forEach(({ way, status, items }) => {
+      let ok = 0;
+      let box = '';
+      items.forEach((node) => {
+        if (way.id === 'img') { if (node.complete && node.naturalWidth > 0) ok++; return; }
+        const svg = node.querySelector('svg');
+        const r = svg ? svg.getBoundingClientRect() : null;
+        if (r && r.width > 0 && r.height > 0) { ok++; box = Math.round(r.width) + 'x' + Math.round(r.height); }
+      });
+      status.textContent = way.label + '  ' + ok + '/' + items.length + (way.id === 'img' ? ' loaded' : ' sized ' + box);
+      status.className = 'dg-line' + (ok < items.length ? ' warn' : '');
+    });
+  }
+  ways.forEach(({ way, items }) => { if (way.id === 'img') items.forEach((img) => { img.addEventListener('load', update); img.addEventListener('error', update); }); });
+  return { el, update };
+}
+
 export function createDiagnosticsScreen() {
   let viewport = null;
   let content = null;
@@ -86,14 +137,17 @@ export function createDiagnosticsScreen() {
       const report = buildReport({ log, diag: appDiag.snapshot(), device, version: VERSION, env: ENV, agent: navigator.userAgent });
 
       content = h('div', { class: 'dg-content' });
+      let icons = null;
       report.forEach((sec) => {
         content.appendChild(h('div', { class: 'dg-heading' }, sec.title));
         sec.lines.forEach((l) => content.appendChild(h('div', { class: 'dg-line' + (l.level === 'error' ? ' error' : l.level === 'warn' ? ' warn' : l.level === 'debug' ? ' debug' : '') }, l.text)));
+        if (sec.icons) { icons = createIconsBlock(); content.appendChild(icons.el); }
       });
       status = h('div', { class: 'dg-status' });
       viewport = h('div', { class: 'dg-viewport' }, content);
       root.appendChild(h('div', { class: 'dg-screen' }, h('div', { class: 'dg-title t-title' }, 'Diagnostics'), viewport, status));
       maxScroll = Math.max(0, content.offsetHeight - viewport.clientHeight);
+      if (icons) icons.update();
       setScroll(0);
     },
 
