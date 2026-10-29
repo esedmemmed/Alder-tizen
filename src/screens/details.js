@@ -102,7 +102,9 @@ export function createDetailsScreen(params = {}) {
   // ---------- title and watch window ----------
 
   function showHero(m) {
-    const keep = ctx.engine.current();
+    // Focus kept from before is only focus on this page: arriving from Home, the engine still points at the card below.
+    const current = ctx.engine.current();
+    const keep = current && root.contains(current) ? current : null;
     const hadFocus = keep && hero && hero.contains(keep);
     if (!hero) {
       hero = h('div', { class: 'dt-hero' });
