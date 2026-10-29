@@ -223,6 +223,8 @@ export function createHomeScreen(params = {}) {
     const description = (ep && ep.overview && ep.overview.trim() ? ep.overview : null) || item.about || '';
     if (!aboutEl.hidden && aboutFor !== description) { aboutFor = description; fitAbout(description); }
     if (page === 'Home' || isCatalog()) showCaption(item);
+    // The caption names the focused card: none while the remote is in the top bar, however the hero came to show a title.
+    if (inside(focusedEl(), headerEl)) captionEl.hidden = true;
     showArt(item);
   }
 
