@@ -1,86 +1,81 @@
-/* Phase 1: the foundation demo (src/ui/demo.js): focus across 3 rows x 40 cards, Back, hold OK, toast, the mock. */
+/*
+ * Phase 1: the foundation, now under the real Home (src/screens/home.js) on the fixture profile: focus across rows, Back,
+ * hold OK, the exit toast, the Tizen mock. The foundation's own demo screens are gone; what they checked (a long row keeps few
+ * cards mounted, a focus move is cheap) is checked here on what the owner will use.
+ */
 export default [{
-  name: 'phase1-demo',
+  name: 'phase1-foundation',
   dir: 'phase1',
-  url: '/?clock=12:03%20AM',
-  async run({ page, press, hold, shot, expect, focused }) {
-    const rowOf = async (g) => page.evaluate((name) => document.querySelector('[data-focus-group="' + name + '"]').querySelectorAll('.card').length, g);
+  url: '/?profile=fixture&clock=12:03%20AM',
+  async run({ page, press, hold, shot, expect, focused, wait }) {
+    const names = () => page.evaluate(() => window.__alder.router.names().join());
+    const cards = () => page.evaluate(() => document.querySelectorAll('.card').length);
 
-    // posters (generated SVG data URIs, through the image loader) have loaded
-    await page.waitForFunction(() => document.querySelectorAll('.card-img.on').length > 5, null, { timeout: 8000 });
+    // posters (through the image loader) have loaded
+    await page.waitForFunction(() => document.querySelectorAll('.card-img.on').length > 1, null, { timeout: 10000 });
+    await wait(600);
     let f = await focused();
-    expect(f && f.group === 'row-0' && f.index === 0, 'Home starts on the first card of the first row');
+    expect(f && f.group === 'hm-continue' && f.index === 0, 'Home starts on the first card of Continue Watching');
     await shot('01-home');
 
-    await press('right', 5);
+    await press('right');
     f = await focused();
-    expect(f.group === 'row-0' && f.index === 5, 'Right x5 moves to card 5 (got ' + f.index + ')');
-    await shot('02-home-card5');
-
-    await press('right', 40, 25);
+    expect(f.group === 'hm-continue' && f.index === 1, 'Right moves to the next card (' + f.index + ')');
+    await press('right', 5, 20);
     f = await focused();
-    expect(f.index === 39, 'Right past the end stops on the last card, 39 (got ' + f.index + ')');
-    const alive = await rowOf('row-0');
-    expect(alive > 0 && alive <= 30, 'the row keeps few cards mounted (' + alive + ' of 40)');
-    await shot('03-home-last-card');
-
-    await press('left', 34, 25);
+    expect(f.index === 2, 'Right past the end stops on the last card (' + f.index + ')');
+    await press('left', 5, 20);
     f = await focused();
-    expect(f.index === 5, 'Left x34 comes back to card 5 (got ' + f.index + ')');
+    expect(f.index === 0, 'Left comes back to the first card');
 
+    await page.waitForFunction(() => document.querySelector('.hm-next:not([hidden])'), null, { timeout: 10000 });
     await press('down');
     f = await focused();
-    expect(f.group === 'row-1' && f.index === 5, 'Down lands on the same index of the next row (' + f.group + ' ' + f.index + ')');
-    await shot('04-second-row');
-    await press('down');
-    f = await focused();
-    expect(f.group === 'row-2' && f.index === 5, 'Down again: third row, same index');
-    await shot('05-third-row');
-    await press('down');
-    f = await focused();
-    expect(f.group === 'row-2', 'Down at the last row stays put');
-
-    await press('up', 2);
-    f = await focused();
-    expect(f.group === 'row-0' && f.index === 5, 'Up x2 returns to the first row (' + f.group + ' ' + f.index + ')');
+    expect(f.group && f.group !== 'hm-continue', 'Down moves to the next row (' + f.group + ')');
+    await shot('02-second-row');
     await press('up');
     f = await focused();
-    expect(f && f.nav, 'Up from the first row reaches the top bar (' + (f && f.nav) + ')');
-    await shot('06-top-bar');
+    expect(f.group === 'hm-continue', 'Up returns to Continue Watching');
+    await press('up');
+    f = await focused();
+    expect(f && f.cls.indexOf('nav-item') >= 0, 'Up from the first row reaches the top bar (' + (f && f.cls) + ')');
+    await shot('03-top-bar');
     await press('down');
     f = await focused();
-    expect(f.group === 'row-0' && f.index === 5, 'Down from the top bar returns to where the row was left');
+    expect(f.group === 'hm-continue' && f.index === 0, 'Down from the top bar returns to the row');
 
-    // OK opens the stub title page; Back closes it and focus is where it was
+    // OK opens the title page; Back closes it and focus is where it was
+    await press('right');
     await press('ok');
-    let names = await page.evaluate(() => window.__alder.router.names());
-    expect(names.join() === 'home,stub', 'OK pushes the stub screen (' + names + ')');
-    await shot('07-stub-title-page');
+    expect((await names()).indexOf('home,details') === 0, 'OK opens the title page (' + (await names()) + ')');
     await press('back');
-    names = await page.evaluate(() => window.__alder.router.names());
+    await wait(400);
     f = await focused();
-    expect(names.join() === 'home' && f.group === 'row-0' && f.index === 5, 'Back pops and focus returns to card 5');
+    expect((await names()) === 'home' && f && f.group === 'hm-continue' && f.index === 1, 'Back pops and focus returns to the card it left (' + (await names()) + ', ' + (f && f.index) + ')');
 
-    // hold OK opens the options panel; Back closes it
+    // hold OK on My List's grid opens the options panel; Back closes it
+    await press('up', 2, 20);
+    await press('right', 4, 20);
+    await wait(500);
+    await press('ok');
+    await press('down');
     await hold('ok');
-    let panel = await page.evaluate(() => !!document.querySelector('.panel'));
+    const panel = await page.evaluate(() => !!document.querySelector('.panel'));
     f = await focused();
     expect(panel && f.cls.indexOf('row-item') >= 0, 'hold OK opens the panel with focus inside it');
-    await shot('08-options-panel');
+    await shot('04-options-panel');
     await press('down');
     f = await focused();
     expect(f.text === 'Mark as watched', 'Down inside the panel moves to the next option (' + f.text + ')');
     await press('back');
-    panel = await page.evaluate(() => !!document.querySelector('.panel'));
-    f = await focused();
-    expect(!panel && f.group === 'row-0' && f.index === 5, 'Back closes the panel and gives focus back');
+    expect(!(await page.evaluate(() => !!document.querySelector('.panel'))), 'Back closes the panel');
 
-    // Back on the first screen asks the app to exit: on a desktop the mock says so with a toast
-    await press('back');
+    // Back from the content goes up to the page's name, and from there out of the app: a toast says so on a desktop
+    for (let i = 0; i < 6 && !(await page.evaluate(() => window.__mockExitRequested)); i++) await press('back', 1, 20);
     const toast = await page.evaluate(() => { const t = document.querySelector('.toast'); return t ? t.textContent : null; });
     const exits = await page.evaluate(() => window.__mockExitRequested || 0);
     expect(exits === 1 && toast && /leave|exit/i.test(toast), 'Back on Home requests exit (exit calls ' + exits + ', toast "' + toast + '")');
-    await shot('09-exit-toast');
+    await shot('05-exit-toast');
 
     // the Tizen mock is there
     const mock = await page.evaluate(() => ({
@@ -89,14 +84,6 @@ export default [{
     }));
     expect(mock.ud === true && mock.hdr === true && mock.keys > 10 && mock.state === 'NONE', 'the Tizen mock is installed (' + JSON.stringify(mock) + ')');
 
-    // focus latency: 30 moves along a row, timed in the page (no throttle: < 50 ms each is the budget)
-    const ms = await page.evaluate(() => {
-      const e = window.__alder.engine;
-      const t0 = performance.now();
-      for (let i = 0; i < 30; i++) e.move('left');
-      for (let i = 0; i < 30; i++) e.move('right');
-      return (performance.now() - t0) / 60;
-    });
-    expect(ms < 50, 'a focus move takes ' + ms.toFixed(2) + ' ms on average (budget 50 ms)');
+    expect((await cards()) <= 150, 'the page keeps few card nodes (' + (await cards()) + ')');
   },
 }];

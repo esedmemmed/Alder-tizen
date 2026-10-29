@@ -3,20 +3,29 @@
  * on the TV: the controls, the Audio & subtitles panel, a source failing over to the next, Up next, the Skip intro pill.
  * The mock plays no picture, so the page behind shows the dark base; the layout, focus and text are what is checked.
  */
-const CLOCK = '/?clock=11:26%20PM';
+// The fixture profile (dev only: ?profile=fixture) opens Home; the player is then pushed on top of it with its own sources.
+const CLOCK = '/?profile=fixture&clock=11:26%20PM';
 
 const text = (page, sel) => page.evaluate((s) => { const e = document.querySelector(s); return e ? e.textContent.trim() : null; }, sel);
 const visible = (page, sel) => page.evaluate((s) => { const e = document.querySelector(s); return !!e && e.style.display !== 'none' && e.getBoundingClientRect().width > 0; }, sel);
 const names = (page) => page.evaluate(() => window.__alder.router.names().join());
 
-/** Opens the demo title page, then the player with the demo's two sources (the first fails at once). */
-async function playDemo({ press, page }) {
-  await page.waitForFunction(() => document.querySelectorAll('.card-img.on').length > 3, null, { timeout: 8000 });
-  await press('ok'); // the first card: the stub title page
-  await press('ok'); // Play
+/** Severance S1 E4 with a first source that fails at once, so the failover shows before the picture. */
+const demoParams = () => ({
+  type: 'series', metaId: 'tt11280740', videoId: 'tt11280740:1:4', name: 'Severance', episode: 'S1 E4  ·  The You You Are', nextVideoId: 'tt11280740:1:5',
+  sources: [
+    stream('Torrentio (2160p)', 'Severance.S01E04.2160p.WEB-DL.DV.HEVC-GROUP.mkv', { prepare: 'fail:PLAYER_ERROR_NOT_SUPPORTED_FILE', duration: 3300 }),
+    stream('Torrentio (1080p)', 'Severance.S01E04.1080p.WEB-DL.DTS.DDP5.1.H264-GROUP.mkv', { tracks: 'mixed+subs', duration: 3300, start: 'slow:2500' }),
+  ],
+});
+
+/** Home as the fixture profile opens it, then the player over it with the failing first source. */
+async function playDemo({ page }) {
+  await page.waitForFunction(() => window.__alder.router.names().join() === 'home' && document.querySelectorAll('.card-img.on').length > 0, null, { timeout: 10000 });
+  await page.evaluate((p) => { window.__alder.router.push('player', p); }, demoParams());
 }
 
-/** The player's own params, for the states the demo's Play does not reach. */
+/** The player's own params, for the states the failing-first-source demo does not reach. */
 function openPlayer(page, params) {
   return page.evaluate((p) => { window.__alder.router.push('player', p); }, params);
 }
@@ -36,7 +45,7 @@ export default [
       await page.route('**/images.metahub.space/logo/**', (route) => route.fulfill({ status: 200, contentType: 'image/svg+xml',
         body: '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="150" viewBox="0 0 900 150"><text x="0" y="110" font-family="Georgia,serif" font-size="100" letter-spacing="6" fill="#f3eee6">SEVERANCE</text></svg>' }));
       await playDemo(api);
-      expect((await names(page)) === 'home,stub,player', 'Play opens the player on top of the title page (' + (await names(page)) + ')');
+      expect((await names(page)) === 'home,player', 'the player opens on top of Home (' + (await names(page)) + ')');
 
       // the first source fails at once: the player says so and tries the next, at the same second
       await page.waitForFunction(() => /That source failed/.test((document.querySelector('.pl-status') || {}).textContent || ''), null, { timeout: 5000 });
@@ -74,10 +83,10 @@ export default [
       await press('back');
       await wait(400);
       expect(!(await visible(page, '.pl-controls.on')), 'Back closes the controls first');
-      expect((await names(page)) === 'home,stub,player', 'and the player stays');
+      expect((await names(page)) === 'home,player', 'and the player stays');
       await press('back');
       await wait(300);
-      expect((await names(page)) === 'home,stub', 'a second Back leaves the player (' + (await names(page)) + ')');
+      expect((await names(page)) === 'home', 'a second Back leaves the player (' + (await names(page)) + ')');
     },
   },
   {
@@ -86,7 +95,7 @@ export default [
     url: CLOCK,
     async run(api) {
       const { page, press, shot, expect, wait } = api;
-      // Dune: its add-on subtitle files are in the fixtures (the demo's Severance has no files behind its subtitle list)
+      // Dune: its add-on subtitle files are in the fixtures (the Severance demo has no files behind its subtitle list)
       await openPlayer(page, Object.assign({}, DUNE, { sources: [stream('Torrentio (1080p)', 'Dune.Part.Two.2024.1080p.WEB-DL.DTS.DDP5.1.mkv', { tracks: 'mixed+subs', duration: 9960 })] }));
       await page.waitForFunction(() => window.__alder.router.top().screen.engine && window.__alder.router.top().screen.engine() && window.__alder.router.top().screen.engine().state.started, null, { timeout: 14000 });
       await press('ok'); // pause, controls up on Play
@@ -170,11 +179,10 @@ export default [
       await page.waitForFunction(() => window.__alder.router.top().screen.engine && window.__alder.router.top().screen.engine() && window.__alder.router.top().screen.engine().state.started, null, { timeout: 14000 });
       await press('back'); // a Back with the controls down leaves the player
       await wait(300);
-      expect((await names(page)) === 'home,stub', 'back on the title page');
-      await press('right'); // Play -> Diagnostics
-      await press('ok');
+      expect((await names(page)) === 'home', 'back on Home');
+      await page.evaluate(() => window.__alder.router.push('diagnostics')); // 4B's Settings opens it too
       await wait(400);
-      expect((await names(page)) === 'home,stub,diagnostics', 'the Diagnostics screen opens (' + (await names(page)) + ')');
+      expect((await names(page)) === 'home,diagnostics', 'the Diagnostics screen opens (' + (await names(page)) + ')');
       const report = await page.evaluate(() => document.querySelector('.dg-content').textContent);
       expect(/DEVICE/.test(report) && /2160p HDR HEVC/.test(report), 'it shows the device profile');
       expect(/Severance\.S01E04\.1080p/.test(report) && /media\.fixture\.test/.test(report), 'it names the stream host and file');
@@ -188,7 +196,7 @@ export default [
       expect(/translate3d\(0px, -\d+/.test(moved), 'Down scrolls the report (' + moved + ')');
       await shot('10-diagnostics-scrolled');
       await press('back');
-      expect((await names(page)) === 'home,stub', 'Back closes Diagnostics');
+      expect((await names(page)) === 'home', 'Back closes Diagnostics');
     },
   },
 ];
