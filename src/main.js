@@ -12,6 +12,9 @@ import { createRouter } from './lib/router.js';
 import { appImages } from './lib/images.js';
 import { createToaster } from './ui/toast.js';
 import { demoScreens } from './ui/demo.js';
+import { playerScreens } from './player/screen.js';
+import { diagnosticsScreens } from './screens/diagnostics.js';
+import { demoPlayerServices } from './player/demo.js';
 
 export function boot() {
   installGlobalHandlers(window, log);
@@ -31,9 +34,10 @@ export function boot() {
   if (IS_DEV) new URLSearchParams(window.location.search).forEach((v, k) => { params[k] = v; });
 
   const context = { engine, toast, images: appImages(), overlayHost: overlayEl, log };
+  context.player = demoPlayerServices(log); // TEMP for Phase 4 to replace: the real services (profile, settings, library, session)
   const router = createRouter({
     root: appEl,
-    screens: demoScreens,
+    screens: Object.assign({}, demoScreens, playerScreens, diagnosticsScreens),
     context,
     onExit: () => {
       // Back at the bottom of the stack leaves the app.

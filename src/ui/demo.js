@@ -11,6 +11,8 @@ import { createRow } from './row.js';
 import { pill, roundButton } from './button.js';
 import { keyHint } from './chip.js';
 import { openPanel } from './panel.js';
+import { demoPlayParams } from '../player/demo.js'; // TEMP for Phase 4 to replace
+import { openDiagnostics } from '../screens/diagnostics.js';
 
 // ---- generated content --------------------------------------------------------------------------------------
 
@@ -91,7 +93,8 @@ function stubScreen(params) {
         h('div', { class: 'meta t-body' }, item.year + '  ·  ' + item.genre + '  ·  ' + item.runtime + '  ·  IMDb ' + item.rating),
         h('div', { class: 'desc t-body on-art' }, DESCRIPTION),
         h('div', { class: 'buttons' },
-          pill('Play', { icon: 'play', onClick: () => ctx.toast('Play: the player arrives in Phase 3') }),
+          pill('Play', { icon: 'play', onClick: () => ctx.router.push('player', demoPlayParams(item)) }), // TEMP for Phase 4 to replace
+          roundButton('settings', { label: 'Diagnostics', onClick: () => openDiagnostics(ctx) }), // TEMP: Settings opens this in Phase 4
           roundButton('check', { label: 'My List', onClick: () => ctx.toast('Added to My List') }),
           roundButton('info', { label: 'Details' }))));
       root.appendChild(h('div', { class: 'back-hint' }, keyHint('Back', 'Return to Home')));
