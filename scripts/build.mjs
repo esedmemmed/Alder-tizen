@@ -82,7 +82,7 @@ export async function build({ dev = false, log = console.log } = {}) {
   mkdirSync(join(outDir, 'licenses'), { recursive: true });
   for (const f of ['INTER_LICENSE.txt', 'INSTRUMENT_SERIF_LICENSE.txt']) copyFileSync(join(ROOT, 'src/ui/fonts', f), join(outDir, 'licenses', f));
   writeFileSync(join(outDir, 'licenses/NOTICE.txt'),
-    'Alder for Tizen ' + pkg.version + '\nGPL-3.0-or-later. A port of Alder, the Android TV Stremio client (https://github.com/esedmemmed/Alder).\n' +
+    'Alder for Tizen ' + pkg.version + '\nGPL-3.0-or-later. A port of Alder, the Android TV Stremio client (https://github.com/aradhyas8/Alder).\n' +
     'Bundled: pako (MIT AND Zlib), qrcode-generator (MIT), Inter and Instrument Serif (SIL OFL 1.1).\n');
 
   // the package: config.xml first, then everything else in name order

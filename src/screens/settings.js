@@ -218,7 +218,7 @@ export function createSettingsScreen() {
         }, { onHold: () => openDiagnostics(ctx) });
         version.el.setAttribute('data-version', '');
         actionRow('Diagnostics', '', 'What happened and what this TV reported: the log, the device and the last stream. Photograph it when something does not play.', () => openDiagnostics(ctx));
-        actionRow('Based on Alder', 'GPL-3.0', 'Alder for Tizen is a port of Alder, the Android TV Stremio client by esedmemmed, under the GNU GPL v3.', () => {
+        actionRow('Based on Alder', 'GPL-3.0', 'Alder for Tizen is a port of Alder, the Android TV Stremio client by aradhyas8 (github.com/aradhyas8/Alder), under the GNU GPL v3.', () => {
           openPanel(ctx, { title: 'Based on Alder', items: ['OK'], focus: 0, message: 'Alder for Tizen is a port of Alder, the Android TV Stremio client, released under the GNU General Public License v3.' });
         });
         break;
