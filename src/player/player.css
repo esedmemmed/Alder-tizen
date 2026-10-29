@@ -48,15 +48,22 @@ html:not(.av-live) .av-object { visibility: hidden; }
 .pl-cell { position: relative; flex: none; width: 124px; height: 152px; }
 .pl-cell.primary { width: 140px; }
 .pl-btn { position: absolute; left: 50%; top: 0; width: 80px; height: 80px; margin-left: -40px; border-radius: 40px; display: flex; align-items: center; justify-content: center;
-  background: var(--glass); border: var(--hairline) solid var(--glass-edge); box-shadow: inset 0 var(--hairline) 0 var(--glass-highlight); color: var(--text); transition: transform var(--t-focus) ease-out; }
+  background: var(--glass-dark); border: var(--hairline) solid var(--glass-edge); box-shadow: inset 0 var(--hairline) 0 var(--glass-highlight); color: var(--text); transition: transform var(--t-focus) ease-out; }
 .pl-btn .icon { width: 40px; height: 40px; }
 .pl-btn.primary { width: 100px; height: 100px; margin-left: -50px; border-radius: 50px; background: var(--text); color: var(--base); border-color: transparent; }
 .pl-btn.primary .icon { width: 50px; height: 50px; }
-.pl-btn.focus { background: var(--glass-focused); border-color: var(--tungsten-rim); transform: scale(var(--card-grow)); }
-.pl-btn.primary.focus { background: var(--text); }
+/* v0.2 focus (components.css has the solid fill layer and the ink): a focused button grows, its name shows under it; the primary
+   one is already filled, so it gets a ring and a glow too (drawn once, faded in) */
+.pl-btn.focus { transform: scale(var(--btn-grow)); }
+.pl-btn.primary::after {
+  content: ''; position: absolute; left: -9px; top: -9px; right: -9px; bottom: -9px; border-radius: 50%;
+  border: 3px solid var(--tungsten); box-shadow: 0 18px 60px var(--focus-glow);
+  opacity: 0; transition: opacity var(--t-fill) ease-out; pointer-events: none;
+}
+.pl-btn.primary.focus::after { opacity: 1; }
 .pl-btn-label { position: absolute; left: 50%; top: 96px; width: 320px; margin-left: -160px; text-align: center; opacity: 0; white-space: nowrap; }
 .pl-cell.primary .pl-btn-label { top: 112px; }
-.pl-btn-label.on { opacity: 1; }
+.pl-btn-label.on { opacity: 1; color: var(--text); font-weight: 600; }
 .pl-divider { flex: none; width: 2px; height: 44px; margin: 28px 20px 0 20px; background: var(--glass-edge); }
 .pl-hints { position: absolute; right: 96px; bottom: 70px; display: flex; flex-direction: column; align-items: flex-end; }
 .pl-hints .keyhint { margin-top: 6px; }
@@ -85,12 +92,18 @@ html:not(.av-live) .av-object { visibility: hidden; }
 .pl-card-text { margin-top: 10px; }
 .pl-card-actions { display: flex; align-items: center; margin-top: 28px; }
 .pl-card-actions > * { margin-right: 12px; }
-.pl-pill { display: inline-flex; align-items: center; height: var(--button-h); padding: 0 32px; border-radius: 34px; background: var(--text); color: var(--base); font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 600; white-space: nowrap; transition: transform var(--t-focus) ease-out; }
+.pl-pill { position: relative; display: inline-flex; align-items: center; height: var(--button-h); padding: 0 32px; border-radius: 34px; background: var(--text); color: var(--base); font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 600; white-space: nowrap; transition: transform var(--t-focus) ease-out; }
 .pl-pill .icon { width: 32px; height: 32px; margin-right: 12px; margin-left: -4px; }
-.pl-pill.focus { transform: scale(var(--card-grow)); box-shadow: 0 0 0 2px var(--tungsten-rim), 0 16px 48px var(--tungsten-glow); }
-.pl-chip { display: inline-flex; align-items: center; height: var(--chip-h); padding: 0 32px; border-radius: 24px; background: var(--glass); border: var(--hairline) solid var(--glass-edge); color: var(--text-2);
+.pl-pill.focus { transform: scale(var(--pill-grow)); }
+.pl-pill::after {
+  content: ''; position: absolute; left: -7px; top: -7px; right: -7px; bottom: -7px; border-radius: 41px;
+  border: 3px solid var(--tungsten); box-shadow: 0 18px 60px var(--focus-glow);
+  opacity: 0; transition: opacity var(--t-fill) ease-out; pointer-events: none;
+}
+.pl-pill.focus::after { opacity: 1; }
+.pl-chip { position: relative; display: inline-flex; align-items: center; height: var(--chip-h); padding: 0 32px; border-radius: 24px; background: transparent; border: var(--hairline) solid var(--chip-edge); color: var(--text-2);
   font-size: var(--fs-small); line-height: var(--lh-small); white-space: nowrap; transition: transform var(--t-focus) ease-out; }
-.pl-chip.focus { transform: scale(var(--chip-grow)); background: var(--glass-focused); color: var(--text); }
+.pl-chip.focus { transform: scale(var(--chip-grow)); }
 
 /* ---- the Audio & subtitles panel ---- */
 .pl-opt-panel { position: absolute; left: 54px; top: 54px; width: 620px; height: 972px; border-radius: 28px; background: rgba(14, 12, 10, 0.94);
@@ -102,8 +115,8 @@ html:not(.av-live) .av-object { visibility: hidden; }
 .pl-opt-heading { margin: 36px 0 10px 0; }
 .pl-row { position: relative; display: flex; align-items: center; height: 64px; padding: 0 18px; border-radius: var(--tile-radius); font-size: var(--fs-body); line-height: var(--lh-body); color: var(--text-2); }
 .pl-row.chosen, .pl-row.focus { color: var(--text); }
-.pl-row.focus { background: var(--row-focused); }
 .pl-row.dim { opacity: 0.45; }
+.pl-row.dim.focus { opacity: 1; }          /* the fill and its ink need full strength to stay readable */
 .pl-opt-name { flex: none; white-space: nowrap; }
 .pl-opt-tag { flex: 1; min-width: 0; margin-left: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pl-opt-check { flex: none; width: 32px; height: 32px; color: var(--tungsten); }
