@@ -13,6 +13,7 @@ import { appImages } from './lib/images.js';
 import { createStore } from './lib/store.js';
 import { appHttp } from './lib/http.js';
 import { createToaster } from './ui/toast.js';
+import { openPanel } from './ui/panel.js';
 import { createSession } from './app/session.js';
 import { firstScreen, playerNavigation } from './app/navigation.js';
 import { createTvLanguage } from './player/language.js';
@@ -50,14 +51,8 @@ export function boot() {
     root: appEl,
     screens: Object.assign({}, screensB, profilesScreens, signinScreens, homeScreens, playerScreens, diagnosticsScreens),
     context,
-    onExit: () => {
-      // Back at the bottom of the stack leaves the app.
-      try {
-        window.tizen.application.getCurrentApplication().exit();
-      } catch (e) {
-        log.info('app', 'exit requested (not on a TV)');
-      }
-    },
+    // Back at the bottom of the stack would leave the app at once: ask first.
+    onExit: () => confirmExit(),
     // A screen that gets covered keeps its place: remember the focused card and give it back on return.
     beforeHide: (entry) => { entry.lastFocus = engine.current(); },
     afterShow: (entry) => {
@@ -66,6 +61,25 @@ export function boot() {
     log,
   });
   context.router = router;
+
+  function exitApp() {
+    try {
+      window.tizen.application.getCurrentApplication().exit();
+    } catch (e) {
+      log.info('app', 'exit requested (not on a TV)');
+    }
+  }
+  // "Exit Alder?" with Stay (focused) and Exit: the filled-focus menu used everywhere. Back or Stay closes it, as the
+  // menu does for any Back; the router hands Back to the dialog first, so a second Back is "Stay".
+  let exitDialog = null;
+  function confirmExit() {
+    if (exitDialog) return;
+    exitDialog = openPanel(context, {
+      title: 'Exit Alder?', message: 'Leave the app and go back to the TV.', items: ['Stay', 'Exit'], focus: 0,
+      onPick: (i) => { if (i === 1) exitApp(); },
+      onClose: () => { exitDialog = null; },
+    });
+  }
   // What src/player/screen.js reads (its engine's services), from the session. The auth key follows the profile in use.
   context.player = {
     settings: session.settings, library: session.books, memory: session.memory, device: session.device, http: session.http,
