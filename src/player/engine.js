@@ -6,7 +6,7 @@
  *
  * Alder's comments, adapted: the player gets a short list of sources (TRY of them from core/ranking.js). One that fails, or
  * has not shown a picture after START_WAIT, gives way to the next at the same second, and when the list runs out the
- * sources page opens (the 'navigate' event; Phase 4 builds the page). Network blips are retried first, twice after 1.5 s
+ * sources page opens (the 'navigate' event; src/app/navigation.js shows it). Network blips are retried first, twice after 1.5 s
  * (NuvioTV's rule), so a dropped connection does not cost the source. Resumes where Stremio says you stopped and writes
  * progress back to the account, so Continue Watching matches on every device.
  *
@@ -169,6 +169,7 @@ export function createEngine(params, deps) {
   // ---- plumbing ----
   const api = {};
   const after = (fn, ms) => {
+    if (shut) return null; // closed: no timer may start again (a late promise or a view still calling in)
     const id = clock.setTimeout(() => { timers.delete(id); fn(); }, ms);
     timers.add(id);
     return id;
@@ -309,7 +310,7 @@ export function createEngine(params, deps) {
     if (duration > 0) from = Math.min(from, Math.max(0, duration - 1000));
     if (from > 0) {
       seekedAt = clock.now();
-      try { await Promise.race([avplay.seekTo(from), new Promise((resolve) => after(resolve, SEEK_WAIT))]); } catch (e) { warn('seek to the resume point failed: ' + errorCode(e)); }
+      try { await Promise.race([avplay.seekTo(from), new Promise((resolve) => after(resolve, SEEK_WAIT))]); } catch (e) { if (!shut) warn('seek to the resume point failed: ' + errorCode(e)); }
       if (mine !== gen || shut) return;
     }
     playRequested = true;
@@ -689,6 +690,7 @@ export function createEngine(params, deps) {
 
   /** Seeks now (a resume correction, the end of an intro, the end of a scrub). */
   function seekTo(ms) {
+    if (shut) return;
     const target = Math.max(0, duration > 0 ? Math.min(ms, Math.max(0, duration - 1000)) : ms);
     seekedAt = clock.now();
     skipped.clear(); // back into an intro: offer it again
@@ -699,14 +701,14 @@ export function createEngine(params, deps) {
       if (pendingSeek === target) pendingSeek = null;
       seekedAt = clock.now();
     }, (e) => {
-      warn('seek failed: ' + errorCode(e));
+      if (!shut) warn('seek failed: ' + errorCode(e));
       if (pendingSeek === target) pendingSeek = null;
     });
   }
 
   /** Moves the playing point by [by] ms; the seek itself waits until the presses stop (SEEK_SETTLE). */
   function scrub(by) {
-    if (!(duration > 0) || live) return;
+    if (shut || !(duration > 0) || live) return;
     const base = scrubTo >= 0 ? scrubTo : position();
     scrubTo = Math.min(Math.max(0, base + by), Math.max(0, duration - 1000));
     emit('scrub', { position: scrubTo });
@@ -747,12 +749,13 @@ export function createEngine(params, deps) {
    * fetched, parsed and drawn by us from the same second: no reload, as the clock does the syncing.
    */
   async function selectSubtitle(choice) {
+    if (shut) return false;
     const token = ++subChoiceToken;
     if (choice.kind === 'addon') {
       if (!http) return false;
       let cues;
       try { cues = parseSubtitles(await http.get(choice.sub.url), choice.sub.format); } catch (e) { cues = null; warn('subtitle file failed: ' + (e && e.message ? e.message : e)); }
-      if (token !== subChoiceToken) return false;
+      if (token !== subChoiceToken || shut) return false;
       if (!cues || !cues.length) { emit('notice', { message: "Couldn't load that subtitle" }); return false; }
       chosenSub = choice.sub;
       subCues = cues;
@@ -792,6 +795,7 @@ export function createEngine(params, deps) {
 
   /** The viewer picked an audio track in the options panel. A track this TV cannot decode is refused. */
   function selectAudio(index) {
+    if (shut) return false;
     const track = audioTracks.find((t) => t.index === index);
     if (!track) return false;
     if (track.playable === 'no') { emit('notice', { message: 'No sound on this TV' }); return false; }
@@ -804,8 +808,8 @@ export function createEngine(params, deps) {
   }
 
   // ---- play / pause ----
-  function play() { if (avplay.play()) { playing = true; emit('playing', { playing: true }); } }
-  function pause() { if (avplay.pause()) { playing = false; emit('playing', { playing: false }); } }
+  function play() { if (!shut && avplay.play()) { playing = true; emit('playing', { playing: true }); } }
+  function pause() { if (!shut && avplay.pause()) { playing = false; emit('playing', { playing: false }); } }
   function togglePlay() { if (playing) pause(); else play(); }
 
   // ---- starting ----
@@ -819,7 +823,7 @@ export function createEngine(params, deps) {
   }
 
   function begin(resume) {
-    if (prepared) return;
+    if (prepared || shut) return; // the library's answer can arrive after Back
     prepared = true;
     lastPosition = resume;
     load(resume);

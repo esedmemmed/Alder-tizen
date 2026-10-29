@@ -120,16 +120,26 @@ export function createAvplay({ webapis = typeof window !== 'undefined' ? window.
       return { unsupportedHeaders: unsupported };
     },
 
-    /** prepareAsync as a promise: resolves in READY, rejects with the error callback's argument. */
+    /**
+     * prepareAsync as a promise: resolves in READY, rejects with the error callback's argument. If the session is closed
+     * (or replaced) before AVPlay answers, the answer is ignored and the promise never settles: whoever waits for it has
+     * been shut down too (the engine checks its own generation after every await), and nothing is left running.
+     */
     prepare() {
-      return new Promise((resolve, reject) => { av().prepareAsync(() => resolve(), (e) => reject(e)); });
+      const mine = session;
+      return new Promise((resolve, reject) => {
+        av().prepareAsync(() => { if (mine === session) resolve(); }, (e) => { if (mine === session) reject(e); });
+      });
     },
 
     play() { return safe('play', () => { av().play(); return true; }, false); },
     pause() { return api.state() === 'PLAYING' ? safe('pause', () => { av().pause(); return true; }, false) : false; },
     stop() { return safe('stop', () => { av().stop(); return true; }, false); },
 
-    /** Leaves the player: drops callbacks first so nothing arrives for a closed session. */
+    /**
+     * Leaves the player: the session ends first, so nothing AVPlay still delivers for it (listener callbacks, a pending
+     * prepareAsync or seekTo answer) reaches anyone, even if close() is called while prepareAsync is running.
+     */
     close() {
       session++;
       if (!api.available) return;
@@ -137,10 +147,11 @@ export function createAvplay({ webapis = typeof window !== 'undefined' ? window.
       safe('close', () => av().close());
     },
 
-    /** seekTo as a promise. Resolves when AVPlay says the seek is done, rejects when it says it failed or threw. */
+    /** seekTo as a promise. Resolves when AVPlay says the seek is done, rejects when it says it failed or threw. Never settles if the session closes first. */
     seekTo(ms) {
+      const mine = session;
       return new Promise((resolve, reject) => {
-        try { av().seekTo(Math.max(0, Math.round(ms)), () => resolve(), (e) => reject(e)); } catch (e) { reject(e); }
+        try { av().seekTo(Math.max(0, Math.round(ms)), () => { if (mine === session) resolve(); }, (e) => { if (mine === session) reject(e); }); } catch (e) { reject(e); }
       });
     },
 

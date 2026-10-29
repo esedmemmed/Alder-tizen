@@ -292,3 +292,38 @@ test('webapis / tizen mocks: product info, key registration, exit hook', () => {
   assert.equal(typeof t.tvinputdevice.registerKeyBatch, 'function');
   assert.ok(t.tvinputdevice.getSupportedKeys().some((k) => k.name === 'MediaPlay'));
 });
+
+test('close() and stop() leave no timer behind: a real player delivers nothing afterwards', async () => {
+  const { av, clock, events, ready } = player();
+  await ready('http://example.test/Movie.2021.1080p.mkv?mock.seekMs=400&mock.prepareMs=300');
+  av.play();
+  av.seekTo(5000, () => events.push('seek-ok'));
+  av.close();
+  assert.equal(av.getState(), 'NONE');
+  assert.equal(av.__mock.pendingTimers, 0);
+  assert.equal(clock.pending(), 0);
+  await clock.advance(60000); // would throw (reading the closed scenario) if a seek or start timer survived
+  assert.ok(!events.includes('seek-ok'));
+
+  // closed during prepareAsync, then a new session: the old prepare timer must not make the new one READY early
+  const second = player();
+  second.av.open('http://example.test/A.mkv?mock.prepareMs=1000');
+  second.av.prepareAsync(() => second.events.push('A-ready'));
+  second.av.close();
+  second.av.open('http://example.test/B.mkv?mock.prepareMs=5000');
+  second.av.prepareAsync(() => second.events.push('B-ready'));
+  await second.clock.advance(1500);
+  assert.deepEqual(second.events, []);
+  assert.equal(second.av.getState(), 'IDLE');
+  await second.clock.advance(4000);
+  assert.deepEqual(second.events, ['B-ready']);
+
+  // stop() cancels a start in progress too
+  const third = player();
+  await third.ready('http://example.test/C.mkv?mock.startMs=3000');
+  third.av.play();
+  third.av.stop();
+  assert.equal(third.av.__mock.pendingTimers, 0);
+  await third.clock.advance(10000);
+  assert.deepEqual(third.events, [], 'nothing arrives after stop()');
+});

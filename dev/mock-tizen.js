@@ -293,6 +293,11 @@ export function createAvplayMock({ clock = realClock, registry = createRegistry(
   let errored = false;
   let startTimer = null;
   let stallTimer = null;
+  // Every one-shot timer of the current session. A real player delivers nothing after close() or stop(), so the mock
+  // must not either: leaving one of these running was the "fast Back" crash (a seek timer reading the closed session).
+  const timers = new Set();
+  let epoch = 0;               // bumped by close() and stop(): a timer that was already queued checks it before acting
+  let videoListeners = [];     // [type, fn] pairs put on the <video> by open(), removed by close()
   const firedStalls = new Set();
   const calls = [];
   const props = {};
@@ -304,7 +309,14 @@ export function createAvplayMock({ clock = realClock, registry = createRegistry(
   const need = (method, allowed) => {
     if (strict && allowed.indexOf(state) < 0) throw new MockWebApiError('InvalidStateError', method + ' is not valid in state ' + state + ' (valid: ' + allowed.join('/') + ')');
   };
-  const deliver = (fn) => clock.setTimeout(fn, 0);   // native events reach JS asynchronously
+  const later = (fn, ms) => {
+    const mine = epoch;
+    const id = clock.setTimeout(() => { timers.delete(id); if (mine === epoch) fn(); }, ms);
+    timers.add(id);
+    return id;
+  };
+  const dropTimers = () => { epoch++; timers.forEach((id) => clock.clearTimeout(id)); timers.clear(); startTimer = null; stallTimer = null; };
+  const deliver = (fn) => later(fn, 0);   // native events reach JS asynchronously
   const emit = (name, ...args) => {
     if (!listener || typeof listener[name] !== 'function') return;
     deliver(() => { if (listener && typeof listener[name] === 'function') listener[name](...args); });
@@ -345,7 +357,7 @@ export function createAvplayMock({ clock = realClock, registry = createRegistry(
     emit('onbufferingstart');
     if (mediaVideo() && videoEl) videoEl.pause();
     if (forSec !== Infinity) {
-      stallTimer = clock.setTimeout(() => {
+      stallTimer = later(() => {
         frozen = false;
         lastTick = clock.now();
         emit('onbufferingprogress', 100);
@@ -376,11 +388,11 @@ export function createAvplayMock({ clock = realClock, registry = createRegistry(
     // play() from READY: the picture starts after startMs unless the scenario says it never does
     started = false;
     if (scenario.start === 'never') { emit('onbufferingstart'); return; }
-    if (scenario.start === 'error') { startTimer = clock.setTimeout(() => fail(scenario.startCode || scenario.errorCode), scenario.startMs); return; }
+    if (scenario.start === 'error') { startTimer = later(() => fail(scenario.startCode || scenario.errorCode), scenario.startMs); return; }
     emit('onbufferingstart');
     const steps = 4;
-    for (let i = 1; i <= steps; i++) clock.setTimeout(() => { if (state === 'PLAYING' && !started) emit('onbufferingprogress', Math.round((100 * i) / steps)); }, (scenario.startMs * i) / (steps + 1));
-    startTimer = clock.setTimeout(() => {
+    for (let i = 1; i <= steps; i++) later(() => { if (state === 'PLAYING' && !started) emit('onbufferingprogress', Math.round((100 * i) / steps)); }, (scenario.startMs * i) / (steps + 1));
+    startTimer = later(() => {
       if (state !== 'PLAYING') { started = false; return; }
       started = true;
       lastTick = clock.now();
@@ -392,7 +404,7 @@ export function createAvplayMock({ clock = realClock, registry = createRegistry(
 
   function seekDone(target, ok, err, jump) {
     if (scenario.seek === 'fail') { deliver(() => { if (typeof err === 'function') err(new MockWebApiError('InvalidValuesError', 'seek failed')); emit('onerror', 'PLAYER_ERROR_SEEK_FAILED'); }); return; }
-    clock.setTimeout(() => {
+    later(() => {
       const dur = scenario.durationSec * 1000;
       pos = Math.max(0, Math.min(dur, target));
       if (mediaVideo() && videoEl) videoEl.currentTime = pos / 1000;
@@ -417,15 +429,22 @@ export function createAvplayMock({ clock = realClock, registry = createRegistry(
       firedStalls.clear();
       if (mediaVideo()) {
         videoEl = video ? video() : null;
-        if (videoEl) { videoEl.src = stripMockParams(u); videoEl.load(); videoEl.addEventListener('ended', () => { if (state === 'PLAYING') { completed = true; emit('onstreamcompleted'); } }); videoEl.addEventListener('error', () => fail('PLAYER_ERROR_NOT_SUPPORTED_FILE')); }
+        if (videoEl) {
+          videoEl.src = stripMockParams(u); videoEl.load();
+          videoListeners = [
+            ['ended', () => { if (state === 'PLAYING') { completed = true; emit('onstreamcompleted'); } }],
+            ['error', () => fail('PLAYER_ERROR_NOT_SUPPORTED_FILE')],
+          ];
+          videoListeners.forEach(([type, fn]) => videoEl.addEventListener(type, fn));
+        }
       }
       state = 'IDLE';
     },
     close() {
       record('close', arguments);
       need('close', ['IDLE', 'READY', 'PLAYING', 'PAUSED']);
-      stopTicker(); clock.clearTimeout(startTimer); clock.clearTimeout(stallTimer);
-      if (videoEl) { videoEl.pause(); videoEl.removeAttribute('src'); videoEl.load(); }
+      stopTicker(); dropTimers();
+      if (videoEl) { videoListeners.forEach(([type, fn]) => videoEl.removeEventListener(type, fn)); videoListeners = []; videoEl.pause(); videoEl.removeAttribute('src'); videoEl.load(); }
       state = 'NONE'; listener = null; url = ''; scenario = null; tracks = [];
     },
     prepare() {
@@ -438,7 +457,7 @@ export function createAvplayMock({ clock = realClock, registry = createRegistry(
       record('prepareAsync', arguments);
       need('prepareAsync', ['IDLE']);
       if (scenario.prepare === 'never') return;
-      clock.setTimeout(() => {
+      later(() => {
         if (state !== 'IDLE') return; // closed or stopped meanwhile
         if (scenario.prepare === 'fail') {
           if (typeof err === 'function') err(new MockWebApiError('InvalidStateError', scenario.prepareCode || 'PLAYER_ERROR_CONNECTION_FAILED'));
@@ -469,7 +488,7 @@ export function createAvplayMock({ clock = realClock, registry = createRegistry(
     stop() {
       record('stop', arguments);
       need('stop', ['READY', 'PLAYING', 'PAUSED']);
-      stopTicker(); clock.clearTimeout(startTimer); clock.clearTimeout(stallTimer);
+      stopTicker(); dropTimers();
       state = 'IDLE'; started = false; frozen = false; pos = 0; completed = false;
       if (mediaVideo() && videoEl) { videoEl.pause(); videoEl.currentTime = 0; }
     },
@@ -580,6 +599,8 @@ export function createAvplayMock({ clock = realClock, registry = createRegistry(
     fail(code = 'PLAYER_ERROR_CONNECTION_FAILED') { errored = false; fail(code); },
     stall(forSec = Infinity) { beginStall(forSec); },
     reset() { calls.length = 0; },
+    /** One-shot timers still waiting (0 after close() or stop(), like a player that has gone quiet). */
+    get pendingTimers() { return timers.size + (ticker === null ? 0 : 1); },
   };
   return avplay;
 }
