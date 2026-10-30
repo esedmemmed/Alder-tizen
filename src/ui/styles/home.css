@@ -6,6 +6,23 @@
  */
 .hm-screen { background: var(--base); }
 
+/* ---- pages: each page (rows or grid, chips, note, caption) is one element, kept alive but out of the document while another is open.
+   Showing it again plays one 150 ms fade and slide, from the side its tab is on; the a/b pair of names lets the same
+   animation start again without reading layout (changing animation-name restarts it). Opacity and transform only. ---- */
+.hm-page { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+.hm-page.in-0-a { animation: hm-in-0-a 150ms linear backwards; }
+.hm-page.in-0-b { animation: hm-in-0-b 150ms linear backwards; }
+.hm-page.in-r-a { animation: hm-in-r-a 150ms ease-out backwards; }
+.hm-page.in-r-b { animation: hm-in-r-b 150ms ease-out backwards; }
+.hm-page.in-l-a { animation: hm-in-l-a 150ms ease-out backwards; }
+.hm-page.in-l-b { animation: hm-in-l-b 150ms ease-out backwards; }
+@keyframes hm-in-0-a { from { opacity: 0.2; } }
+@keyframes hm-in-0-b { from { opacity: 0.2; } }
+@keyframes hm-in-r-a { from { opacity: 0.2; transform: translate3d(56px, 0, 0); } }
+@keyframes hm-in-r-b { from { opacity: 0.2; transform: translate3d(56px, 0, 0); } }
+@keyframes hm-in-l-a { from { opacity: 0.2; transform: translate3d(-56px, 0, 0); } }
+@keyframes hm-in-l-b { from { opacity: 0.2; transform: translate3d(-56px, 0, 0); } }
+
 /* ---- the art and its shades (MainActivity `shaded`: the shades are painted into the bitmap on Android) ---- */
 .art { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: var(--base); overflow: hidden; }
 .art-img {
@@ -36,6 +53,13 @@
   opacity: 0; transition: opacity 150ms linear;
 }
 .hm-hero.on { opacity: 1; }
+/* a new page's first title fades in with its rows (the a/b pair restarts the animation, as for .hm-page) */
+.hm-hero.swap-a.on { animation: hm-swap-a 150ms linear backwards; }
+.hm-hero.swap-b.on { animation: hm-swap-b 150ms linear backwards; }
+@keyframes hm-swap-a { from { opacity: 0.2; } }
+@keyframes hm-swap-b { from { opacity: 0.2; } }
+/* the description is cut to two lines in here, where nothing shows (fitAbout) */
+.hm-hero.hm-measure { visibility: hidden; pointer-events: none; }
 .hm-hero.grid { bottom: 640px; }
 .hm-title { position: relative; }
 .hm-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
@@ -100,4 +124,4 @@
 .hm-grid .card:focus { z-index: 3; }
 .hm-count { position: absolute; left: 96px; top: 464px; }
 .hm-listhint { position: absolute; right: 96px; bottom: 36px; padding: 6px 28px 8px 28px; border-radius: 28px; }
-.hm-gridpage .hm-rows { display: none; }
+

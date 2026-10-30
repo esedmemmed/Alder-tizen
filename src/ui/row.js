@@ -141,6 +141,23 @@ export function createRow({
       update();
     },
 
+    /**
+     * A fresh answer for the same row, patched in: a card stays when the very same item is still at its place, only the others
+     * are made again (or dropped). [next] reuses the old item objects for titles that did not change (home-model mergeItems), so
+     * a refresh that changes nothing touches no card, and one that changes a title redraws that card, not the row. The selected
+     * index is kept; when its card is gone, the caller puts focus back (focusIndex).
+     */
+    patch(next) {
+      const prev = items;
+      items = next;
+      Array.from(mounted.keys()).forEach((i) => { if (i >= items.length || prev[i] !== items[i]) unmount(i); });
+      selected = Math.max(0, Math.min(selected, items.length - 1));
+      const s = slide ? slideFor({ index: selected, step, itemWidth, viewport, count: items.length, safeRight })
+        : scrollFor({ index: selected, scroll, step, itemWidth, viewport, count: items.length, safeRight });
+      if (s !== scroll) { scroll = s; place(false); }
+      update();
+    },
+
     /** More cards after the last one (a catalog's next page). The selected card and the scroll stay as they are. */
     append(extra) {
       if (!extra.length) return;

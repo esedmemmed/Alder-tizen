@@ -16,11 +16,97 @@ export const FIRST = 10 // cards per row loaded before it is scrolled sideways
 export const GENRE_ROWS = 6 // genre rows (and chips) at most on Shows and Movies
 export const CATALOG_WAIT = 6000 // ms a catalog may take
 export const LIST_COLUMNS = 6
-export const SWITCH_WAIT = 300 // ms the remote rests on a page's name before it opens: passing over names opens nothing
+export const SWITCH_WAIT = 150 // ms the remote rests on the name of a page that has to be built before it opens: passing over names builds nothing
+export const KEPT_GAP = 90 // ms between two flips to pages that are already built (a held key repeats faster than a page can fade in)
+export const WARM_AFTER = 1500 // ms after Home's first row is in before the other pages are built ahead
+export const QUIET = 600 // ms without a key press before the warm-up does a piece of work
+export const CARD_BUDGET = 150 // cards alive in all pages together (PLAN.md section 2)
+export const ADDONS_TTL = 60 * 1000 // ms before a page asks Stremio for the add-on list again when it is shown
+export const LIBRARY_TTL = 20 * 1000 // the same for the library (Continue Watching, My List)
+export const CATALOGS_TTL = 30 * 60 * 1000 // and for a page's catalogs
 export const PAGES = ['Home', 'Shows', 'Movies', 'Live', 'My List']
 export const NAV_PAGES = ['Home', 'Shows', 'Movies', 'My List'] // Alder's top bar leaves Live out (its screenshots too)
 
 export const isCatalogPage = p => p === 'Shows' || p === 'Movies'
+
+/**
+ * Which page the top bar opens, and when. The remote resting on a page's name opens it at once when the page is already built
+ * (it is only shown again, which costs a frame), and after SWITCH_WAIT when it still has to be built, so moving across the bar
+ * builds nothing in between. OK always opens at once. Flips between built pages are at least KEPT_GAP apart: a held key would
+ * restart the page's fade-in on every press. `commit(label, how)` does the opening (how: 'rest' | 'ok'); `canCommit(label)` is
+ * asked when a rest has ended (the remote may have left the bar meanwhile).
+ */
+export function createPageSwitcher({ isBuilt, commit, canCommit = () => true, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout, buildWait = SWITCH_WAIT, keptGap = KEPT_GAP }) {
+  let timer = null
+  let pending = null
+  let lastCommit = -Infinity
+  const stop = () => { if (timer !== null) { clearTimer(timer); timer = null } pending = null }
+  const fire = (label, how) => { stop(); if (how !== 'ok' && !canCommit(label)) return false; lastCommit = now(); commit(label, how); return true }
+  const later = (label, ms) => { pending = label; timer = setTimer(() => { timer = null; fire(label, 'rest') }, ms) }
+  return {
+    /** The remote came to [label]'s name while [current] is open. -> 'same' | 'now' | 'soon' | 'wait' */
+    rest(label, current) {
+      stop()
+      if (label === current) return 'same'
+      if (!isBuilt(label)) { later(label, buildWait); return 'wait' }
+      const wait = lastCommit + keptGap - now()
+      if (wait <= 0) { fire(label, 'rest'); return 'now' }
+      later(label, wait)
+      return 'soon'
+    },
+    /** OK on [label]'s name. False when it is the page already open (the caller goes down into it). */
+    ok(label, current) { stop(); if (label === current) return false; return fire(label, 'ok') },
+    /** The remote left the bar. */
+    cancel: stop,
+    get pending() { return pending },
+  }
+}
+
+/** Two titles show the same card and the same lines under it: nothing to redraw when a fresh answer brings the same. */
+export const sameTitle = (a, b) => !!a && !!b && ['id', 'name', 'poster', 'progress', 'finished', 'left', 'stoppedAt', 'videoId'].every(k => a[k] === b[k])
+
+/**
+ * A row's titles after a fresh answer, patched in: a title that did not change stays the very same object (its details, picture
+ * and card are kept), one that changed (new progress, a new place) is the fresh object carrying over what the old one had been
+ * told by the meta add-on. -> { items, changed }: changed is false when the answer is the list already shown.
+ */
+export function mergeItems(prev, next) {
+  const byId = new Map(prev.map(p => [p.id, p]))
+  let changed = prev.length !== next.length
+  const items = next.map((n, i) => {
+    const old = byId.get(n.id)
+    if (old && sameTitle(old, n)) { if (prev[i] !== old) changed = true; return old }
+    changed = true
+    if (old && old.filled && !n.filled) {
+      n.filled = true; n.settled = old.settled
+      if (!n.art) n.art = old.art
+      if (!n.logo) n.logo = old.logo
+      if (!n.about) n.about = old.about
+      if (!n.facts.length) n.facts = old.facts
+    }
+    return n
+  })
+  return { items, changed }
+}
+
+/**
+ * Which hidden pages let go of their cards to keep the whole app within [budget]: the one longest unused first. [pages] are
+ * { label, cards, used } (used: when it was last shown); the open page is never trimmed.
+ */
+export function pagesToTrim(pages, active, budget = CARD_BUDGET) {
+  let total = pages.reduce((n, p) => n + p.cards, 0)
+  const out = []
+  const hidden = sortBy(pages.filter(p => p.label !== active && p.cards > 0), [[p => p.used, 'asc']])
+  for (const p of hidden) {
+    if (total <= budget) break
+    out.push(p.label)
+    total -= p.cards
+  }
+  return out
+}
+
+/** Has [at] (a time, 0 for never) gone past [ttl]? */
+export const stale = (at, now, ttl) => !at || now - at > ttl
 
 /** Alder's `synopsisAtSentence`: the description cut at the last sentence end before [limit], else at a word with an ellipsis. */
 export function synopsisAtSentence(t, limit) {
